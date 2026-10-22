@@ -474,3 +474,17 @@ curl "http://127.0.0.1:8001/api/search/fast?q=biryani"
 - Disabled/unreachable → MySQL search response (no hard failure).
 - Daily bulk index at 04:00; run manually after large catalog changes.
 - Single-node dev/staging is fine; size the cluster for production before enabling.
+
+
+---
+
+## 25. Dispatch core (groundwork)
+
+```bash
+./scripts/dispatch_core_test.sh
+```
+
+- Pure policy/batching module; no production dispatch service yet.
+- Geohash stands in for H3; swapping the cell key does not change the scoring contract.
+- Do not route live orders to it until the Spring adapter, Redis GEO ingestion and
+  `dispatch.assignment.v1` are built and certified.

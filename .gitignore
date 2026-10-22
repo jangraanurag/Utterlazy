@@ -49,3 +49,11 @@ Thumbs.db
 # ─── Local tooling ───
 .commandcode/
 .playwright/
+
+# ─── Java/Python build caches ───
+**/out/
+__pycache__/
+*.pyc
+
+# ─── Maven/build outputs ───
+**/target/

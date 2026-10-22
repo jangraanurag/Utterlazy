@@ -555,3 +555,15 @@ outbox publisher, whatsapp-service + consumer, Redis queues for worker/scheduler
 - `IncidentService::teamOwner(role, city)` prefers a `support_lead` whose `OpsShift` covers now in
   the incident's city, then falls back to the oldest admin with that role.
 - Used by at-risk (50% SLA) and breach escalation; shift roster is the on-call source of truth.
+
+## 36. Dispatch core (built, groundwork)
+
+- `GeoCell` geohash + haversine; `RiderCandidate`/`OrderStop` records.
+- `DispatchPolicy`: filters (offline/unverified/stale/overloaded/>6km/excluded), weighted score,
+  new-rider +0.05 and every-8th-assignment exploration round, deterministic tie-break.
+- `BatchPlanner`: greedy 1–3 order batches by pickup/drop proximity.
+- Self-test 20 checks; no Redis/Kafka/Spring integration yet.
+
+## 37. Shard routing groundwork (built)
+
+- `ShardRouter` SHA-256 city→shard, deterministic/range-tested; primitive for the future orders DB split.

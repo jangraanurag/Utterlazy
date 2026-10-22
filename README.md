@@ -168,6 +168,7 @@ Wave 1 design + operations: [`docs/architecture-v2.md`](docs/architecture-v2.md)
 [`docs/wave2-cutover-readiness.md`](docs/wave2-cutover-readiness.md),
 [`docs/wave2-projection.md`](docs/wave2-projection.md),
 [`docs/wave2-opensearch.md`](docs/wave2-opensearch.md),
+[`docs/wave2-dispatch-core.md`](docs/wave2-dispatch-core.md),
 [`docs/build-checklist.md`](docs/build-checklist.md).
 
 ---

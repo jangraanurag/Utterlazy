@@ -89,6 +89,9 @@ jobs:
       - name: Framework-free core self-test
         run: ./scripts/order_core_test.sh
 
+      - name: Dispatch core self-test
+        run: ./scripts/dispatch_core_test.sh
+
       - name: Spring adapter tests (MockMvc + H2)
         working-directory: services/order-command-core
         run: mvn -B test

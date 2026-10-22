@@ -56,6 +56,7 @@ run_gate "WhatsApp helper tests" bash -c 'cd whatsapp-service && php tests/phone
 run_gate "WhatsApp boot + routes" bash -c 'cd whatsapp-service && php artisan route:list > /dev/null'
 run_gate "Pricing parity (PHP → Java)" ./scripts/pricing_parity.sh
 run_gate "Order-command core self-test" ./scripts/order_core_test.sh
+run_gate "Dispatch core self-test" ./scripts/dispatch_core_test.sh
 
 MVN_BIN="${MVN:-}"
 if [ -z "${MVN_BIN}" ] && command -v mvn >/dev/null 2>&1; then MVN_BIN="$(command -v mvn)"; fi

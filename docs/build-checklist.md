@@ -135,9 +135,10 @@
 
 ### 2.2 Remaining Wave 2
 - [ ] Java order-command: checkout proxy → owner
-- [ ] Idempotency store in order service
-- [ ] Orders DB split from catalog, shard key city_id (city_id groundwork done)
-- [ ] Java dispatch on H3/Redis GEO
+- [x] Idempotency store in order service (unique user+key, replay-safe)
+- [ ] Orders DB split from catalog, shard key city_id (columns + `ShardRouter` groundwork done)
+- [x] Dispatch policy/batching core (geohash, scoring, exploration, batching; 20 checks)
+- [ ] H3/Redis GEO integration, offer timers, `dispatch.assignment.v1` (dispatch service)
 - [x] OpenSearch organic search: raw HTTP client, bulk indexer, `/search/fast`, MySQL fallback
 - [ ] Incremental index sync from catalog events + relevance tuning
 - [ ] Early-dispatch wait pay → platform (needs dispatch)

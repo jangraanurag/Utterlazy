@@ -39,6 +39,7 @@ public final class OrderCoreSelfTest {
         testCancelRules();
         testLineLimits();
         testPricingBreakdown();
+        testSharding();
 
         System.out.println();
         if (fail > 0) {
@@ -175,6 +176,30 @@ public final class OrderCoreSelfTest {
         Order.OrderSnapshot snapshot = (Order.OrderSnapshot) created.data();
         check("pricing: snapshot carries breakdown", snapshot.pricing() != null
                 && snapshot.pricing().netPayout().compareTo(new BigDecimal("165.04")) == 0);
+    }
+
+    private static void testSharding() {
+        var router = new com.utterlazy.order.application.ShardRouter();
+        java.util.UUID city = java.util.UUID.randomUUID();
+        int shards = 16;
+
+        int first = router.shardFor(city, shards);
+        check("shard: deterministic", first == router.shardFor(city, shards));
+        check("shard: in range", first >= 0 && first < shards);
+
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            seen.add(router.shardFor(java.util.UUID.randomUUID(), shards));
+        }
+        check("shard: spreads across shards", seen.size() > 8);
+
+        boolean invalid = false;
+        try {
+            router.shardFor(city, 0);
+        } catch (IllegalArgumentException e) {
+            invalid = true;
+        }
+        check("shard: zero shards rejected", invalid);
     }
 
     // ─── fixture ───
