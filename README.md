@@ -165,6 +165,7 @@ Wave 1 design + operations: [`docs/architecture-v2.md`](docs/architecture-v2.md)
 [`docs/wave3-ranker-serving.md`](docs/wave3-ranker-serving.md),
 [`docs/certification.md`](docs/certification.md),
 [`docs/scale-path.md`](docs/scale-path.md),
+[`docs/non-code-setup.md`](docs/non-code-setup.md),
 [`docs/wave2-cutover-readiness.md`](docs/wave2-cutover-readiness.md),
 [`docs/wave2-projection.md`](docs/wave2-projection.md),
 [`docs/wave2-opensearch.md`](docs/wave2-opensearch.md),
