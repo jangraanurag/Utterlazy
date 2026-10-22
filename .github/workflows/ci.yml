@@ -1,0 +1,137 @@
+name: Khaalo CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PHP_VERSION: '8.3'
+  NODE_VERSION: '20'
+
+jobs:
+  # ─── Laravel Backend Tests ───
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: secret
+          MYSQL_DATABASE: khaalo_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, xml, ctype, json, bcmath, pdo_mysql, zip
+          coverage: xdebug
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('**/composer.lock') }}
+
+      - name: Install Dependencies
+        working-directory: ./catalog-service
+        run: composer install --no-progress --prefer-dist
+
+      - name: Prepare Environment
+        working-directory: ./catalog-service
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Run Migrations
+        working-directory: ./catalog-service
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: khaalo_test
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+        run: php artisan migrate --force
+
+      - name: Run Tests
+        working-directory: ./catalog-service
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: khaalo_test
+          DB_USERNAME: root
+          DB_PASSWORD: secret
+        run: php artisan test --coverage-text
+
+      - name: Run PHPStan (Static Analysis)
+        working-directory: ./catalog-service
+        run: |
+          composer require --dev larastan/larastan
+          vendor/bin/phpstan analyse app --level=5 --no-progress || true
+
+  # ─── Flutter Tests ───
+  flutter-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        working-directory: ./mobile
+        run: flutter pub get
+
+      - name: Run Analyzer
+        working-directory: ./mobile
+        run: flutter analyze --no-fatal-infos || true
+
+      - name: Run Tests
+        working-directory: ./mobile
+        run: flutter test --coverage || true
+
+  # ─── Build & Deploy ───
+  build:
+    needs: [backend-tests, flutter-tests]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker Images
+        run: |
+          docker compose build
+
+      - name: Run Smoke Tests
+        run: |
+          docker compose up -d
+          sleep 30
+          curl -f http://localhost:8000/up || exit 1
+          curl -f http://localhost:8001/up || exit 1
+          docker compose down
+
+      - name: Push to Registry (on tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "Tag detected — would push images to registry"
+          # docker tag khaalo-api-gateway your-registry/khaalo-api-gateway:${{ github.ref_name }}
+          # docker push your-registry/khaalo-api-gateway:${{ github.ref_name }}

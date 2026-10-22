@@ -1,0 +1,56 @@
+name: restaurant_app
+description: "UtterLazy Vendor App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+resolution: workspace
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  ui: any
+  api: any
+  core: any
+  flutter_riverpod: ^2.5.1
+  google_fonts: ^8.1.0
+  flutter_tts: ^4.2.5
+  vibration: ^3.2.0
+  audioplayers: ^6.7.1
+  flutter_background_service: ^5.1.0
+  flutter_local_notifications: ^17.2.2
+  firebase_core: ^3.13.1
+  flutter_callkit_incoming: ^2.0.0+17
+  flutter_native_splash: ^2.4.3
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  image_picker: ^1.1.2
+  open_filex: ^4.5.0
+  fl_chart: ^1.2.0
+  shared_preferences: ^2.2.2
+  dio: ^5.4.0
+  intl: ^0.19.0
+  path_provider: ^2.1.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "../../assets/icon/app_icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/sounds/order_ringtone.mp3
+    - assets/sounds/alarm.wav
+    - assets/sounds/order_alert.wav

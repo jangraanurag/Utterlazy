@@ -1,0 +1,17 @@
+name: welo_mobile_workspace
+description: A new Flutter project.
+publish_to: none
+
+environment:
+  sdk: ">=3.11.4 <4.0.0"
+
+workspace:
+  - apps/customer_app
+  - apps/restaurant_app
+  - apps/rider_app
+  - packages/core
+  - packages/api
+  - packages/ui
+
+dev_dependencies:
+  melos: ^7.5.1

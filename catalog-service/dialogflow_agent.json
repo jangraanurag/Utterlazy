@@ -1,0 +1,126 @@
+{
+  "description": "UtterLazy Food Delivery — Dialogflow Agent for Google Assistant",
+  "language": "en",
+  "supportedLanguages": ["hi", "ta", "te", "bn", "mr", "gu"],
+  "webhook": {
+    "url": "https://your-domain.com/api/webhooks/dialogflow",
+    "available": true
+  },
+  "intents": [
+    {
+      "name": "OrderFood",
+      "phrases": [
+        "order {food_item} from {restaurant}",
+        "I want {food_item}",
+        "mujhe {food_item} chahiye",
+        "order {number} {food_item}",
+        "{food_item} mangwa do",
+        "biryani order karo",
+        "I'd like to order {food_item} from {restaurant}",
+        "get me {number} {food_item} please",
+        "order food",
+        "khana order karo"
+      ],
+      "parameters": [
+        {"name": "food_item", "type": "@sys.any", "isList": true},
+        {"name": "restaurant", "type": "@sys.any"},
+        {"name": "number", "type": "@sys.number-integer"}
+      ]
+    },
+    {
+      "name": "TrackOrder",
+      "phrases": [
+        "track my order",
+        "where is my order",
+        "order status",
+        "mera order kahan hai",
+        "delivery status",
+        "track {order_id}"
+      ],
+      "parameters": [
+        {"name": "order_id", "type": "@sys.any"}
+      ]
+    },
+    {
+      "name": "ReorderLast",
+      "phrases": [
+        "repeat my last order",
+        "order again",
+        "same as before",
+        "fir se order karo",
+        "previous order",
+        "mera purana order repeat karo"
+      ]
+    },
+    {
+      "name": "SearchRestaurant",
+      "phrases": [
+        "find {cuisine} near me",
+        "{cuisine} restaurants",
+        "show me {cuisine}",
+        "{cuisine} dhundho",
+        "best {cuisine} in {city}",
+        "restaurants near me"
+      ],
+      "parameters": [
+        {"name": "cuisine", "type": "@sys.any"},
+        {"name": "city", "type": "@sys.geo-city"}
+      ]
+    },
+    {
+      "name": "CancelOrder",
+      "phrases": [
+        "cancel my order",
+        "order cancel karo",
+        "cancel order {order_id}",
+        "I want to cancel"
+      ],
+      "parameters": [
+        {"name": "order_id", "type": "@sys.any"}
+      ]
+    },
+    {
+      "name": "CheckoutCart",
+      "phrases": [
+        "checkout",
+        "place order",
+        "confirm order",
+        "submit order",
+        "order de do",
+        "payment karo",
+        "pay now"
+      ]
+    },
+    {
+      "name": "AccountInfo",
+      "phrases": [
+        "my account",
+        "show my profile",
+        "mera account",
+        "my orders",
+        "order history"
+      ]
+    },
+    {
+      "name": "Support",
+      "phrases": [
+        "help",
+        "customer support",
+        "complaint",
+        "madad chahiye",
+        "I need help",
+        "contact support"
+      ]
+    }
+  ],
+  "responses": {
+    "Default Welcome Intent": [
+      "Welcome to UtterLazy! You can order food by saying something like 'order chicken biryani'. How can I help you today?",
+      "Namaste! UtterLazy mein aapka swagat hai. Biryani order karna hai toh boliye. Kaise madad kar sakta hoon?"
+    ],
+    "Default Fallback Intent": [
+      "Sorry, I didn't understand that. You can say 'order chicken biryani' or 'track my order'.",
+      "Mujhe samajh nahi aaya. Aap 'biryani order karo' ya 'order kahan hai' bol sakte hain."
+    ]
+  }
+}

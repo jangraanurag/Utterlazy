@@ -1,0 +1,126 @@
+{
+  "manifest": {
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://your-domain.com/api/webhooks/alexa"
+        }
+      }
+    },
+    "manifestVersion": "1.0",
+    "publishingInformation": {
+      "locales": {
+        "en-IN": {
+          "summary": "Order food delivery with UtterLazy using your voice",
+          "examplePhrases": [
+            "Alexa, ask UtterLazy to order chicken biryani",
+            "Alexa, ask UtterLazy where is my order",
+            "Alexa, open UtterLazy"
+          ],
+          "keywords": ["food", "delivery", "order", "restaurant", "biryani", "utterlazy"],
+          "name": "UtterLazy Food Delivery",
+          "description": "Order food from your favourite restaurants with UtterLazy. Just tell Alexa what you want to eat and we'll take care of the rest."
+        },
+        "hi-IN": {
+          "summary": "UtterLazy ke saath awaaz se khana order karein",
+          "examplePhrases": [
+            "Alexa, UtterLazy se chicken biryani order karo",
+            "Alexa, UtterLazy se mera order kahan hai",
+            "Alexa, UtterLazy kholo"
+          ],
+          "name": "UtterLazy फूड डिलीवरी",
+          "description": "UtterLazy ke saath apne favourite restaurant se awaaz ke zariye khana order karein. Bas Alexa ko batao ki aapko kya khana hai."
+        }
+      },
+      "isAvailableWorldwide": true,
+      "testingInstructions": "Test with any restaurant name and food item",
+      "category": "FOOD_AND_DRINK",
+      "distributionCountries": ["IN"]
+    },
+    "permissions": [
+      {
+        "name": "alexa::profile:email:read"
+      }
+    ]
+  },
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "utterlazy",
+      "modelConfiguration": {
+        "fallbackIntentSensitivity": {
+          "level": "LOW"
+        }
+      },
+      "intents": [
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": [
+            "help",
+            "what can I order",
+            "kaise order karein",
+            "madad"
+          ]
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": ["cancel", "stop", "cancel karo"]
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": ["stop", "bye", "enough"]
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": [
+            "blah",
+            "random stuff"
+          ]
+        },
+        {
+          "name": "OrderFoodIntent",
+          "slots": [
+            {"name": "foodItem", "type": "AMAZON.FoodItem"},
+            {"name": "restaurantName", "type": "AMAZON.Restaurant"},
+            {"name": "quantity", "type": "AMAZON.NUMBER"}
+          ],
+          "samples": [
+            "order {quantity} {foodItem} from {restaurantName}",
+            "I want {foodItem}",
+            "get me {foodItem}",
+            "{quantity} {foodItem}",
+            "order {foodItem}",
+            "{foodItem} order karo"
+          ]
+        },
+        {
+          "name": "TrackOrderIntent",
+          "samples": [
+            "track my order",
+            "where is my order",
+            "order status",
+            "mera order kahan hai"
+          ]
+        },
+        {
+          "name": "ReorderIntent",
+          "samples": [
+            "repeat my last order",
+            "order again",
+            "same as before"
+          ]
+        },
+        {
+          "name": "SearchIntent",
+          "slots": [
+            {"name": "cuisine", "type": "AMAZON.FoodItem"}
+          ],
+          "samples": [
+            "find {cuisine} near me",
+            "search for {cuisine}"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

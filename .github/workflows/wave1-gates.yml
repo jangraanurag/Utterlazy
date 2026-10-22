@@ -1,0 +1,180 @@
+name: Wave 1 Gates
+
+# Fast, dependency-light checks for the event backbone + WhatsApp channel.
+# These are the gates that must stay green before Wave 2 cutover.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'catalog-service/**'
+      - 'whatsapp-service/**'
+      - 'services/order-command-core/**'
+      - 'web/admin-web/**'
+      - 'web/vendor-web/**'
+      - 'infra/pricing/**'
+      - 'services/ranker/**'
+      - 'docker-compose*.yml'
+      - 'scripts/**'
+      - '.github/workflows/wave1-gates.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  php-lint-and-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, json, bcmath, pdo_mysql, pdo_sqlite, zip, redis
+          coverage: none
+
+      - name: Cache Composer (catalog)
+        uses: actions/cache@v4
+        with:
+          path: catalog-service/vendor
+          key: composer-catalog-${{ hashFiles('catalog-service/composer.lock') }}
+
+      - name: Install catalog deps
+        working-directory: catalog-service
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHP lint (catalog changed surface)
+        working-directory: catalog-service
+        run: |
+          find app/Http app/Services app/Models app/Console app/Observers database/migrations routes tests \
+            -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+
+      - name: Wave 1 smoke (outbox, idempotency, placements, reversal)
+        working-directory: catalog-service
+        run: php tests/wave1_smoke.php
+
+      - name: Cache Composer (whatsapp)
+        uses: actions/cache@v4
+        with:
+          path: whatsapp-service/vendor
+          key: composer-whatsapp-${{ hashFiles('whatsapp-service/composer.lock') }}
+
+      - name: Install whatsapp deps
+        working-directory: whatsapp-service
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: PHP lint + boot (whatsapp)
+        working-directory: whatsapp-service
+        run: |
+          find app database routes config bootstrap -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+          cp .env.example .env
+          php artisan key:generate --force
+          php artisan route:list > /dev/null
+          php artisan list | grep -q 'events:consume'
+          php tests/phone_normalizer_test.php
+
+  order-command:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Framework-free core self-test
+        run: ./scripts/order_core_test.sh
+
+      - name: Spring adapter tests (MockMvc + H2)
+        working-directory: services/order-command-core
+        run: mvn -B test
+
+  pricing-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, json, bcmath, pdo_mysql, zip
+          coverage: none
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: catalog-service/vendor
+          key: composer-catalog-${{ hashFiles('catalog-service/composer.lock') }}
+
+      - name: Install catalog deps
+        working-directory: catalog-service
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Pricing parity (PHP golden vectors → Java)
+        run: ./scripts/pricing_parity.sh
+
+  ranker-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        working-directory: services/ranker
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Ranker tests
+        working-directory: services/ranker
+        run: python -m unittest discover -s tests -v
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        app: [admin-web, vendor-web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/${{ matrix.app }}/package-lock.json
+
+      - name: Install
+        working-directory: web/${{ matrix.app }}
+        run: npm ci
+
+      - name: Build
+        working-directory: web/${{ matrix.app }}
+        run: npm run build
+
+  compose-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate dev compose
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate prod compose
+        env:
+          SERVICE_TOKEN: ci-token
+          WA_APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+        run: docker compose -f docker-compose.prod.yml config --quiet

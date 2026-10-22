@@ -1,0 +1,399 @@
+version: '3.8'
+
+services:
+  # ─── MySQL Database ───
+  mysql:
+    image: mysql:8.0
+    container_name: utterlazy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: food_catalog,food_whatsapp,food_orders
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis (Queue/Cache) ───
+  redis:
+    image: redis:7-alpine
+    container_name: utterlazy-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  # ─── API Gateway ───
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: utterlazy-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: local
+      APP_URL: http://localhost:8000
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      CATALOG_SERVICE_URL: http://catalog-service:8001
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+    volumes:
+      - ./api-gateway:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Catalog Service ───
+  catalog-service:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-catalog-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      APP_ENV: local
+      APP_URL: http://localhost:8001
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      WHATSAPP_SERVICE_URL: http://whatsapp-service:8002
+      ORDER_COMMAND_URL: http://order-command:8003
+      ORDER_COMMAND_SHADOW_ENABLED: ${ORDER_COMMAND_SHADOW_ENABLED:-false}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
+      ANALYTICS_COMMAND_CENTER_SOURCE: ${ANALYTICS_COMMAND_CENTER_SOURCE:-mysql}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: utterlazy
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+    volumes:
+      - ./catalog-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Outbox Publisher (event bus: Kafka in prod, Redis stream in dev) ───
+  outbox-publisher:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-outbox-publisher
+    restart: unless-stopped
+    command: php artisan outbox:publish --daemon --batch=100 --sleep=1
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      REDIS_HOST: redis
+      OUTBOX_TRANSPORT: ${OUTBOX_TRANSPORT:-redis}
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_PREFIX: utterlazy.
+    volumes:
+      - ./catalog-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── WhatsApp Service ───
+  whatsapp-service:
+    build:
+      context: ./whatsapp-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-whatsapp-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_URL: http://localhost:8002
+      APP_KEY: ${WA_APP_KEY:-base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_whatsapp
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      CACHE_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
+      REDIS_HOST: redis
+      CATALOG_SERVICE_URL: http://catalog-service:8001
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      EVENT_BUS_DRIVER: ${EVENT_BUS_DRIVER:-redis}
+      WA_PAYMENT_LINK_BASE: ${WA_PAYMENT_LINK_BASE:-https://utterlazy.com/pay}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      META_VERIFY_TOKEN: ${META_VERIFY_TOKEN:-utterlazy_wa_webhook}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    volumes:
+      - ./whatsapp-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+
+  # ─── WhatsApp Event Consumer (order/payment → utility templates) ───
+  whatsapp-consumer:
+    build:
+      context: ./whatsapp-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-whatsapp-consumer
+    restart: unless-stopped
+    command: php artisan events:consume
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      APP_KEY: ${WA_APP_KEY:-base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_whatsapp
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      REDIS_HOST: redis
+      CACHE_DRIVER: redis
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-}
+      EVENT_BUS_DRIVER: ${EVENT_BUS_DRIVER:-redis}
+      META_PHONE_NUMBER_ID: ${META_PHONE_NUMBER_ID:-}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN:-}
+    volumes:
+      - ./whatsapp-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Wave 2 shadow order-command (profile: wave2) ───
+  order-command:
+    profiles: ["wave2"]
+    build:
+      context: ./services/order-command-core
+      dockerfile: Dockerfile
+    container_name: utterlazy-order-command-dev
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      SERVER_PORT: 8003
+      ORDER_DB_URL: jdbc:mysql://mysql:3306/food_orders?useSSL=false&allowPublicKeyRetrieval=true
+      ORDER_DB_USER: root
+      ORDER_DB_PASSWORD: secret
+      SPRING_SQL_INIT_MODE: always
+      SPRING_SQL_INIT_SCHEMA_LOCATIONS: classpath:schema.sql
+      KAFKA_BROKERS: kafka:9092
+      OUTBOX_ENABLED: "false"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+
+  opensearch:
+    # Wave 2 organic search. Enable with: docker compose ... --profile search up -d opensearch
+    profiles: ["search"]
+    image: opensearchproject/opensearch:2.11.0
+    container_name: utterlazy-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+
+  # ─── Organic ranker (profile: ranker) ───
+  ranker:
+    profiles: ["ranker"]
+    build:
+      context: ./services/ranker
+      dockerfile: Dockerfile
+    container_name: utterlazy-ranker
+    restart: unless-stopped
+    environment:
+      RANKER_MODEL_ENABLED: ${RANKER_MODEL_ENABLED:-false}
+      RANKER_SHADOW_ENABLED: ${RANKER_SHADOW_ENABLED:-false}
+      RANKER_MODEL_SHARE_PERCENT: ${RANKER_MODEL_SHARE_PERCENT:-10}
+      RANKER_MODEL_PATH: /app/model.json
+    ports:
+      - "8010:8010"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  projection-consumer:
+    profiles: ["wave2"]
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-projection-consumer
+    restart: unless-stopped
+    command: php artisan projection:consume
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      REDIS_HOST: redis
+      QUEUE_CONNECTION: redis
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── ClickHouse analytics (profile: analytics) ───
+  clickhouse:
+    profiles: ["analytics"]
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: utterlazy-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+
+  # ─── Kafka (KRaft, single-node dev; 3 brokers in prod compose) ───
+  kafka:
+    image: bitnami/kafka:3.8
+    container_name: utterlazy-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_CFG_NODE_ID: 0
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ─── Queue Worker ───
+  queue-worker:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-queue-worker
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=3 --tries=3
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      ORDER_COMMAND_URL: http://order-command:8003
+      ORDER_COMMAND_SHADOW_ENABLED: ${ORDER_COMMAND_SHADOW_ENABLED:-false}
+    volumes:
+      - ./catalog-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Scheduler (Cron) ───
+  scheduler:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-scheduler
+    restart: unless-stopped
+    command: >
+      sh -c "echo '* * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1' | crontab - && crontab -l && sleep infinity"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: food_catalog
+      DB_USERNAME: root
+      DB_PASSWORD: secret
+      QUEUE_CONNECTION: redis
+      REDIS_HOST: redis
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}
+      ANALYTICS_COMMAND_CENTER_SOURCE: ${ANALYTICS_COMMAND_CENTER_SOURCE:-mysql}
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: utterlazy
+    volumes:
+      - ./catalog-service:/var/www/html
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── WebSocket Server (Laravel Reverb) ───
+  reverb:
+    build:
+      context: ./catalog-service
+      dockerfile: Dockerfile
+    container_name: utterlazy-reverb
+    restart: unless-stopped
+    command: php artisan reverb:start --port=8080
+    ports:
+      - "8080:8080"
+    environment:
+      BROADCAST_CONNECTION: reverb
+      REVERB_APP_KEY: ${REVERB_APP_KEY:-}
+      REVERB_APP_HOST: 0.0.0.0
+      REVERB_PORT: 8080
+      REVERB_SCHEME: http
+    volumes:
+      - ./catalog-service:/var/www/html
+    depends_on:
+      - catalog-service
+
+volumes:
+  mysql_data:
+  opensearch_data:
+  clickhouse_data:

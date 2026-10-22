@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8003}
+
+spring:
+  application:
+    name: order-command
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:mysql://localhost:3306/food_orders?useSSL=false&allowPublicKeyRetrieval=true}
+    username: ${ORDER_DB_USER:root}
+    password: ${ORDER_DB_PASSWORD:secret}
+    hikari:
+      maximum-pool-size: ${ORDER_DB_POOL:20}
+      connection-timeout: 3000
+  sql:
+    init:
+      mode: never
+  jackson:
+    default-property-inclusion: non_null
+
+outbox:
+  enabled: ${OUTBOX_ENABLED:false}
+  poll-ms: ${OUTBOX_POLL_MS:1000}
+  batch-size: ${OUTBOX_BATCH_SIZE:200}
+  max-retries: ${OUTBOX_MAX_RETRIES:5}
+  topic-prefix: ${KAFKA_TOPIC_PREFIX:utterlazy.}
+
+kafka:
+  bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+
+logging:
+  level:
+    com.utterlazy.order: INFO
+    org.springframework.jdbc.core: WARN

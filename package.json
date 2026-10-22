@@ -1,0 +1,15 @@
+{
+  "name": "project",
+  "version": "1.0.0",
+  "description": "> **Tier 2 & Tier 3 India ka apna food delivery platform.** > Aggregator model — restaurants register hote hain, hum unhe orders + reach dete hain. > **Flutter-first. Mobile is primary. Web is support.**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

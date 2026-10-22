@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-background: #05080f;
+  --color-surface: #0a0e1a;
+  --color-surface-variant: #111827;
+  --color-on-background: #ffffff;
+  --color-on-surface: #ffffff;
+  --color-on-surface-variant: rgba(255, 255, 255, 0.6);
+  
+  --color-primary: #ff6b00;
+  --color-primary-container: rgba(255, 107, 0, 0.1);
+  --color-on-primary: #05080f;
+  
+  --color-secondary: #00d4ff;
+  --color-secondary-container: rgba(0, 212, 255, 0.1);
+  --color-on-secondary: #05080f;
+  
+  --color-tertiary: #D4AF37;
+  
+  --color-outline: rgba(255, 255, 255, 0.1);
+  --color-outline-variant: rgba(255, 255, 255, 0.05);
+
+  --color-surface-container-lowest: #0a0e1a;
+  --color-surface-container-low: #0f172a;
+  --color-surface-container: #1e293b;
+  --color-surface-container-high: #334155;
+  --color-surface-container-highest: #475569;
+
+  --font-display: "Space Grotesk", sans-serif;
+  --font-body: "Inter", sans-serif;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on-background);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: "Space Grotesk", sans-serif;
+  }
+  
+  .glass {
+    backdrop-filter: blur(24px);
+    background: rgba(10, 14, 26, 0.7);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  
+  .glass-card {
+    backdrop-filter: blur(20px);
+    background: rgba(10, 14, 26, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .sovereign-gradient {
+    background: linear-gradient(135deg, #ff6b00, #ff9100);
+  }
+
+  .text-glow-orange {
+    text-shadow: 0 0 10px rgba(255, 107, 0, 0.5);
+  }
+
+  .shadow-glow-blue {
+    box-shadow: 0 0 30px rgba(0, 212, 255, 0.15);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

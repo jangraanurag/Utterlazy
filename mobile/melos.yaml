@@ -1,0 +1,20 @@
+name: welo_mobile
+
+packages:
+  - "apps/*"
+  - "packages/*"
+
+scripts:
+  analyze:
+    run: flutter analyze .
+    description: Run dart analyzer in all packages.
+
+  format:
+    run: dart format .
+    description: Format all dart code.
+
+  build_runner:
+    run: dart run build_runner build --delete-conflicting-outputs
+    exec:
+      concurrency: 1
+    description: Run build_runner in all packages that have it.

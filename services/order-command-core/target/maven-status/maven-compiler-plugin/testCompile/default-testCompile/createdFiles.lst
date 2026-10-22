@@ -1,0 +1,7 @@
+com/utterlazy/order/PricingParityCli.class
+com/utterlazy/order/OrderCoreSelfTest$Fixture.class
+com/utterlazy/order/OrderCoreSelfTest$RecordingOutbox.class
+com/utterlazy/order/OrderApiIntegrationTest.class
+com/utterlazy/order/OrderCoreSelfTest$ImmediateUow.class
+com/utterlazy/order/OrderCoreSelfTest.class
+com/utterlazy/order/OrderCoreSelfTest$InMemoryRepo.class

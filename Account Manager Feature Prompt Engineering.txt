@@ -1,0 +1,301 @@
+﻿Architecture and Implementation Blueprint: Account Manager Multi-Tenant Scoping and OTP-Gated Approval Workflows
+Executive Overview and Ecosystem Context
+The evolution of digital aggregator platforms, particularly those tailored for specific geographic and economic demographics such as the Tier 2 and Tier 3 cities targeted by the Khaalo (internally referred to as Welo) ecosystem, demands highly specialized operational roles to bridge the gap between platform administrators and localized vendor partners.1 Operating on a pure aggregator model devoid of direct restaurant ownership, the Khaalo platform requires an architectural paradigm that supports robust localized management while preserving the absolute autonomy, financial sovereignty, and security of the restaurant partners.1 The platform is engineered to rival established giants like Swiggy and Zomato by providing hyper-localized support, which necessitates the introduction of a specialized internal user role: The Account Manager (AM).1
+Central to this operational scaling strategy is the deployment of Account Managers. These are internal Khaalo staff members deployed by global platform administrators to manage specialized portfolios of assigned restaurants.1 They provide proactive support in digital marketing, menu curation, campaign management, and overall digital presence optimization. However, delegating promotional capabilities—specifically the creation of financially impactful entities such as Advertisements (Ads) and Promotional Offers (Promo Codes, Buy-One-Get-One deals, and Opt-in Campaigns)—to internal staff introduces significant vectors for financial liability, miscommunication, and unauthorized data mutation.1 If an Account Manager were to inadvertently configure an excessively generous discount or an aggressive Pay-Per-Click budget without the restaurant's consent, the financial damages would be borne directly by the vendor partner, severely fracturing the trust foundational to the aggregator model.
+To categorically mitigate these risks, the system architecture mandates the implementation of an impenetrable, cryptographically secure, One-Time Password (OTP)-gated approval state machine.1 Any marketing entity or structurally significant modification created by an Account Manager on behalf of a restaurant enters a suspended lifecycle state and cannot interact with the production catalog, customer-facing applications, or billing engines until explicitly authorized by the restaurant owner.1 This authorization is achieved via an email-based OTP validation executed exclusively within the Flutter-based Restaurant Application.1
+This document provides an exhaustive, forensic architectural analysis and implementation blueprint for integrating the Account Manager identity, the comprehensive feature suite available to this role, the multi-tenant scoping mechanisms, the complex state machine configurations, and the strictly regulated OTP approval workflows across the Laravel 13 microservices, the Vue 3 web administration portals, and the Flutter mobile clients.1 Ultimately, this extensive analysis culminates in a highly structured, comprehensive system prompt designed to instruct an OpenCode AI agent in the full-stack development of this ecosystem, satisfying the core developmental directive.
+System Architecture and Technological Infrastructure
+Before delineating the specific mechanics of the Account Manager workflow, it is imperative to establish the overarching architectural topology of the Khaalo/Welo platform. The system is engineered as a highly decoupled, mobile-primary infrastructure consisting of microservices, WebSocket event broadcasters, and distinct client interfaces optimized for performance and maintainability.1
+The outermost layer of the infrastructure is governed by an NGINX reverse proxy, which orchestrates the routing of incoming HTTP and WebSocket traffic across heavily segmented subdomains to ensure distinct operational boundaries.1 The routing configuration directs api.khaalo.in to the core API Gateway, which operates on port :8000.1 This gateway is a Laravel 13 application responsible for critical cross-cutting concerns, including authentication via Laravel Sanctum, centralized Firebase Cloud Messaging (FCM) dispatch for push notifications, and the hosting of the Filament-powered Vue 3 Admin Panel where the Account Managers operate.1 Conversely, the catalog.khaalo.in subdomain routes to the Catalog Service operating on port :8001.1 This separate Laravel-powered microservice houses the primary business logic, managing over one hundred and thirty endpoints dedicated to the processing of menus, advertisements, and promotional offers.1 Finally, the ws.khaalo.in subdomain targets the WebSocket Server powered by Laravel Reverb on port :8080, which is entirely responsible for real-time, bi-directional event propagation, such as instant updates to the Kitchen Display System (KDS) and the asynchronous delivery of approval queue notifications to the mobile clients.1
+Data persistence and rapid retrieval are managed through a highly optimized dual-layer approach. The relational data is housed in a MySQL 8 cluster, strictly partitioned into food_gateway and food_catalog schemas to maintain the integrity of the microservice boundaries and prevent tightly coupled database queries.1 Ephemeral data, rapid state lookups, session management, job queuing, and the critical cryptographic OTP rate-limiting mechanisms are managed via a high-performance Redis 7 instance.1
+The client-side architecture is bifurcated into mobile and web domains, adhering strictly to a "Flutter-first" development philosophy where mobile applications are the primary consumption interfaces.1 The mobile ecosystem is structured as a monorepo managed via Melos, comprising shared foundational packages that power three distinct applications: the Customer App, the Restaurant App, and the Rider App.1 These applications leverage the packages/api module for HTTP requests using the Dio client, the packages/core module for robust state management via Riverpod, and the packages/ui module for standardizing design themes and components across the suite.1 The secondary web clients, encompassing the Admin Panel (admin-web), Vendor Portal (vendor-web), and Customer Web, are constructed using modern web architectures featuring Vue 3.5 utilizing the Composition API, Vite 8 for rapid bundling, Tailwind CSS 4 for utility-first styling, and TypeScript for rigorous type safety.1 It is within the admin-web portal that the Account Manager's operational theater resides.
+Account Manager Operational Capabilities and Feature Suite
+To properly configure the authorization matrices and user interfaces for the Account Manager role, the system must precisely define the scope of their operational capabilities. Account Managers are assigned to restaurants to catalyze growth, optimize digital storefronts, and manage complex marketing campaigns that the restaurant owners may lack the technical acumen or time to execute independently. The requested feature list for an Account Manager operating within the Filament Admin panel encompasses a broad spectrum of marketing, analytical, and supportive functionalities.
+The following table delineates the comprehensive suite of features available to the Account Manager within their assigned multi-tenant scope.
+Feature Category
+	Specific Capability
+	Execution Workflow and Constraints
+	Campaign Operations
+	Pay-Per-Click (PPC) Ad Creation
+	AM configures daily budgets, bid limits, and target demographics. Requires OTP approval.
+	Campaign Operations
+	Promotional Code Generation
+	AM defines discount logic (Flat vs. Percentage), minimum purchase amounts, and scheduling windows. Requires OTP approval.
+	Campaign Operations
+	BOGO Discount Configuration
+	AM maps specific menu items for Buy-One-Get-One structures and defines active scheduling. Requires OTP approval.
+	Campaign Operations
+	Opt-In Campaign Participation
+	AM facilitates the restaurant's participation in platform-wide sales events, acknowledging the discount share split. Requires OTP approval.
+	Analytics & Reporting
+	Financial Dashboard Access
+	Read-only access to sales volume, order frequency, and campaign conversion rates specifically for assigned restaurants.
+	Analytics & Reporting
+	User Engagement Metrics
+	Visibility into customer retention rates, cart abandonment statistics, and promotional code redemption frequencies.
+	Menu & Catalog Oversight
+	Menu Auditing and Review
+	AM can view current item availability, pricing structures, and categorization to recommend optimizations.
+	Menu & Catalog Oversight
+	Item Image Curation
+	AM can upload professional food photography to replace subpar vendor images. (May be configured to require OTP or standard approval based on policy).
+	Vendor Support
+	Onboarding Assistance
+	AM guides newly registered restaurants through profile completion, banking detail submission, and initial catalog setup.
+	Vendor Support
+	Query Resolution
+	AM acts as the primary liaison between the restaurant and Khaalo's central technical support or billing departments.
+	The most critical aspect of this feature suite is that any action resulting in a direct financial alteration or a modification of the public-facing promotional catalog is strictly governed by the OTP approval state machine.1 Analytical viewing, reporting, and non-destructive auditing capabilities are immediately available to the Account Manager upon accessing the restaurant's profile in the Vue 3 Admin Panel, provided the multi-tenant scoping mechanisms are correctly executed.
+Multi-Tenant Scoping and Pivot Architecture
+The realization of the Account Manager role requires a highly sophisticated approach to multi-tenancy and authorization within the Filament Admin framework hosted on the API Gateway.6 Unlike global platform administrators who possess unrestricted, panoptic visibility across the entire food_gateway and food_catalog databases, Account Managers exist within a highly localized, dynamically restricted multi-tenant scope. They must only be able to view, query, and mutate data for the specific subset of restaurants explicitly assigned to them by a higher-level administrator.1
+An Account Manager is fundamentally a staff user residing within the standard users table of the food_gateway database. Their distinct privileges are governed by a specific role designation, managed via the Spatie Laravel Permission package or similar Filament-compatible role-based access control (RBAC) integrations such as Filament Shield.6 The critical architectural requirement to facilitate their localized access is the implementation of a many-to-many pivot relationship between the Account Managers and the Restaurants.
+The architecture dictates the creation of a specialized pivot schema, designated as account_manager_restaurant. This table maps the user_id representing the Account Manager to the corresponding restaurant_id. Furthermore, it must include an assigned_by column pointing to the administrator who authorized the linkage, alongside standard timestamp columns to maintain an audit trail of the assignment itself.1 The system architecture must accommodate the possibility of overlapping assignments, such as one Account Manager overseeing digital marketing campaigns while a secondary Account Manager handles menu inventory and kitchen operations, although current operational constraints often restrict this to a single manager to maintain unblemished audit clarity.1
+When an Account Manager authenticates via the Vue 3 Admin portal located at admin.khaalo.in, the backend system must aggressively and automatically intercept all Eloquent Object-Relational Mapping (ORM) queries. To ensure absolute data isolation and categorically prevent cross-contamination of restaurant data—a scenario that could lead to severe privacy breaches, misallocation of funds, or catastrophic unauthorized campaign launches—the multi-tenancy must be enforced globally at the ORM layer, rather than relying on developers to manually apply filters at the controller layer.10
+Laravel's Global Scopes provide the optimal, most secure mechanism for this requirement.11 The engineering team must implement a custom TenantScope class that implements the Illuminate\Database\Eloquent\Scope interface. Within the apply method of this scope, the system evaluates the authenticated user's assigned role. If the system confirms the user holds the 'AccountManager' role, the scope automatically executes a subquery against the account_manager_restaurant pivot table to retrieve the array of authorized restaurant_ids. The scope subsequently appends a stringent WHERE IN SQL clause to every outbound database query across all relevant models (such as Ads, Offers, Orders, and Menus), dynamically filtering the records to only those associated with the permitted identifiers.11 This decoupled, abstract multi-tenancy core guarantees that malicious attempts, accidental API manipulations, or poorly written frontend queries cannot bypass the geographic or portfolio restrictions assigned to the Account Manager.12 When the Account Manager navigates to the Filament dashboard, the widgets, tables, and relationship managers will natively reflect only their assigned domain without requiring bespoke controller logic for every page.6
+The Cryptographic State Machine for Campaigns
+The central conflict resolved by this architectural blueprint is the secure delegation of campaign creation privileges to internal staff without conceding the ultimate activation authority. Account Managers must be empowered to leverage their expertise to configure complex marketing campaigns, but the restaurant partner bears the ultimate financial and operational responsibility for honoring those campaigns and paying for the associated discounts or advertising clicks.1 Therefore, the lifecycle of these entities must be tightly controlled by a cryptographic, multi-stage state machine.1
+The approval workflow applies strictly to two primary domains managed within the isolated Catalog Service.1 The first domain comprises Advertisements (Ads), which include Pay-Per-Click (PPC) campaigns and featured Card Ads designed to utilize the restaurant's marketing budget to artificially boost their visibility in the Customer App's ranking algorithms. The second, more complex domain comprises Offers. The Offers module is multifaceted, encompassing direct Promo Codes defined by specific discount types (Flat Amount or Percentage), maximum financial caps, minimum purchase limits, scheduling windows (Start dates, End dates, precise Time of Day restrictions), and specific user targeting parameters.1 Furthermore, it includes Buy-One-Get-One (BOGO) discounts that require item-level mapping dictating buy quantities and free quantities, as well as Admin Opt-In Campaigns representing platform-wide sales events where the discount financial burden is split proportionally between the Khaalo platform and the restaurant.1
+To govern the transition of these entities from creation to production visibility, both the ads and offers tables (along with their associated polymorphic variants) must be augmented with an approval_status enumerator. This field serves as the primary gating mechanism across the entire microservice ecosystem.1
+The allowable states and their transition rules are defined precisely within the following structure:
+State Designation
+	Functional Description
+	Transition Triggers and Preconditions
+	Not Required
+	The entity was created autonomously directly by the Restaurant owner via their Flutter application.
+	Bypasses the approval flow entirely. The entity enters the standard Active or Scheduled lifecycle immediately upon database insertion.
+	Pending Restaurant Approval
+	The default, mandatory initial state for any entity created by an AccountManager via the Filament Admin panel.
+	Initiated automatically upon AM form submission. The entity is strictly invisible to the customer app, rider pipelines, and catalog API endpoints. It is effectively quarantined.
+	Approved
+	The restaurant owner has successfully verified the cryptographic email OTP within the specified expiry window.
+	Triggered exclusively by a valid OTP hash match evaluated by the Gateway Service. The entity unlocks and transitions to Active or Scheduled based on its defined Start Date.
+	Rejected
+	The restaurant explicitly denies the AM's submitted campaign.
+	Triggered by direct user action in the Restaurant App. Requires the capture of an optional rejection_reason payload to inform the AM. This is a terminal state.
+	Expired
+	The scheduled start date of the pending entity passes without any definitive action taken by the restaurant owner.
+	Triggered autonomously by a scheduled Laravel Console Command executing a sweeping query against pending records. This is a terminal state to prevent retroactive activations.
+	The foundational precondition rule governing this entire architecture dictates that an Account Manager-created advertisement or promotional offer cannot, under any circumstances, be consumed by any customer-facing API endpoint, rider application routing algorithm, or backend billing engine while its status remains Pending Restaurant Approval.1 In this state, it is effectively a "ghost" record, visible solely to the Account Manager who created it within their specific Filament dashboard, and surfaced to the Restaurant App's isolated Approvals queue for review.
+The Real-Time Asynchronous Approval Pipeline
+The lifecycle of an Account Manager-generated campaign represents a highly complex, fault-tolerant orchestration of front-end Vue 3 form validation, asynchronous microservice communication, push notification dispatch, real-time WebSocket event propagation, and cryptographic verification executing across the mobile Flutter client.1 This pipeline is executed in a precise, sequential manner.
+Phase 1: Context Injection and Asynchronous Dispatch
+The workflow initializes when an Account Manager successfully authenticates into the Vue 3 Admin Panel and navigates to the "Create Promo Code" or "Create Ad" Filament resource. Because the Account Manager is tightly scoped to specific restaurants via the Global Scope discussed previously, the initial step in the form creation requires selecting a target restaurant_id from a dynamically restricted dropdown menu.1 The Account Manager populates the campaign parameters, such as establishing a twenty percent discount with a maximum cap of one hundred rupees, requiring a minimum purchase of three hundred and ninety-nine rupees, and targeting exclusively new users.1
+Upon the submission of this form, the Filament resource controller intercepts the standard Eloquent creation lifecycle. It programmatically injects contextual audit metadata into the payload before committing the transaction to the database.1 This injected payload explicitly defines the created_by_type as 'AccountManager', sets the created_by_id to the authenticated user's ID, and forces the approval_status to 'Pending Restaurant Approval', overriding any attempt by the client interface to bypass this state.1
+The moment the MySQL transaction successfully commits within the Catalog Service, the architecture mandates the dispatch of a highly specific Laravel Event, designated as RequiresRestaurantApproval. This event serves as the catalyst for two immediate, asynchronous actions executed by the queued workers. First, a push notification payload is compiled and routed through the API Gateway, targeting the specific Firebase Cloud Messaging (FCM) device tokens associated with the restaurant owner's active sessions.1 Secondly, a real-time WebSocket event is emitted via the Laravel Reverb server on a heavily protected private channel specifically scoped to that restaurant (e.g., private-restaurant.{id}.approvals). If the restaurant owner is currently navigating the Flutter application, the internal state management instantly processes this WebSocket event, updating a numeric alert badge on the "Approvals" navigation tab without requiring any manual pull-to-refresh actions from the user.1
+Phase 2: Mobile Interface and State Management
+The Restaurant App, developed as a primary constituent of the Flutter monorepo, features a dedicated Approvals screen engineered to handle this specific workflow. The underlying architecture relies heavily on Riverpod's AsyncNotifier paradigms to handle the fetching and real-time updating of the pending entities list.4 By utilizing Riverpod, the application avoids the traditional, cumbersome setState anti-patterns, allowing the UI to react fluidly to background data mutations initiated by the WebSocket connections.4 The user interface strictly conforms to the overarching Khaalo design system: it employs an eight-pixel base unit grid, enforces a dark mode presentation utilizing a #0A0E1A background hex code, and standardizes typography using Space Grotesk for display headers and Inter for body text readability.1
+When the user taps a pending item from the queue, a read-only detail view is presented, displaying the exact parameters submitted by the Account Manager.1 To maintain strict cryptographic auditability and simplify the state machine transitions, the initial system architecture enforces a rigid "Approve-as-submitted" or "Reject" paradigm.1 Direct editing of the pending fields by the restaurant owner prior to approval is expressly prohibited, as permitting such mutations would irrevocably fracture the audit trail detailing what the Account Manager originally proposed versus what was ultimately activated.1
+Phase 3: OTP Generation, Delivery, and Cryptographic Security
+When the restaurant owner initiates the authorization sequence by tapping the "Approve" button, a POST request is transmitted via the robust Dio HTTP client, routing from the Flutter application to the API Gateway.1 This initiates the critical OTP generation sequence. The backend controller generates a cryptographically secure, random six-digit numeric string.1
+It is a paramount security directive that this OTP is never stored in plaintext within the database. The system immediately applies a cryptographic hashing function (utilizing SHA-256 or bcrypt) to the plain string. The resulting hash is stored in a highly specialized relational table named restaurant_approval_otps. This record associates the hash with the specific entity_type and entity_id of the pending campaign, logs the targeted restaurant_id, establishes an expires_at timestamp strictly configured to ten minutes from the exact moment of generation, and initializes an attempt_count integer at zero.1
+Regarding the delivery mechanism, while the Khaalo platform possesses a fully integrated backend architecture for SMS delivery via Fast2SMS, current operational directives explicitly disable the transmission of SMS OTPs, favoring application-based or email-based delivery vectors.1 Consequently, the system leverages Laravel Mailables to compile a professionally formatted, responsive HTML email containing the plaintext six-digit code.15 This Mailable is pushed onto the Redis queue to prevent blocking the HTTP response thread, ensuring the Flutter application immediately transitions to the input phase while the SMTP servers dispatch the email to the primary address registered to the restaurant owner.1
+Phase 4: Validation, Rate Limiting, and Activation
+The Flutter application subsequently transitions to an OTP input dialog featuring a six-digit PIN entry interface and a prominent ten-minute countdown timer managed by a dedicated Riverpod provider. Upon the user entering the final digit, the Dio client automatically dispatches the verification payload to the backend.
+At this juncture, stringent security and rate-limiting protocols are enforced. The introduction of an OTP gate is structurally compromised if the validation mechanism remains susceptible to brute-force traversal algorithms or denial-of-service attacks via OTP generation spamming.16 Therefore, Laravel's built-in RateLimiter facade is aggressively applied.17 The architecture enforces a strict generation throttle, permitting a restaurant to request a new OTP generation a maximum of three times within a fifteen-minute window to protect the email infrastructure.15 Furthermore, the validation endpoint strictly enforces a maximum of five incorrect entry attempts per OTP hash.1 The implementation must transactionally increment the attempt_count in the restaurant_approval_otps table upon every failed request.2 If the attempt_count reaches or exceeds five, the OTP record is permanently invalidated, returning an HTTP 422 Unprocessable Entity response to the Dio client, which Riverpod translates into a red error state and haptic vibration feedback for the user.2 To prevent distributed attacks, a Route::middleware('throttle:5,1') declaration binds the rate limit contemporaneously to the origin IP address and the restaurant_id.17
+If the hashed input matches the stored hash and the timestamp precedes the expiration window, the validation succeeds. Because the approval of an entity requires disparate updates across multiple tables—updating the OTP record's verified_at timestamp, updating the core Ad/Offer status to Approved, logging the approved_at timestamp, setting approved_via to email_otp, and inserting a record into the account_manager_activity_logs—these operations are mandatorily wrapped within a DB::transaction() closure.1 If the Catalog Service fails to properly index the newly approved offer into the production database due to an intermittent failure, the Gateway Service automatically rolls back the entire OTP verification transaction, absolutely preventing the system from entering an inconsistent, orphaned state where the OTP is consumed but the campaign remains inactive. Following a successful commit, the Riverpod state invalidates the pending queue, smoothly removing the item from the user's view, and the campaign officially enters the active platform lifecycle.1
+Data Modeling and Immutable Audit Schemas
+The robust execution of this distributed workflow necessitates precise, structural augmentations to the relational schemas within both the food_catalog and food_gateway databases. The fundamental separation of concerns dictates that authorization mapping and activity auditing occur in the gateway, while the actual entity modification occurs in the catalog. Furthermore, given the severe potential for financial discrepancies stemming from marketing campaigns, an unalterable, immutable audit trail is an absolute, non-negotiable requirement.1 Every action performed by an Account Manager must be meticulously recorded to facilitate dispute resolution.
+The following tables define the required database structures to support the Account Manager ecosystem.
+Gateway Database: Multi-Tenant Mapping
+Table Designation
+	Column Name
+	Data Type Specifications
+	Relational Constraints and Notes
+	account_manager_restaurant
+	id
+	BigInt (Unsigned)
+	Primary Key, Auto Increment sequence
+	
+
+	user_id
+	BigInt (Unsigned)
+	Foreign Key mapping to users.id (The Account Manager)
+	
+
+	restaurant_id
+	BigInt (Unsigned)
+	Foreign Key mapping to restaurants.id
+	
+
+	assigned_by
+	BigInt (Unsigned)
+	Foreign Key mapping to users.id (The delegating Admin)
+	
+
+	created_at
+	Timestamp
+	Automatically populated upon assignment creation
+	Catalog Database: Entity Augmentation
+Both the ads and offers tables (and their underlying specific structural variants like promo_codes and bogo_discounts) require identical polymorphic audit columns to track the approval lifecycle.1
+Column Name
+	Data Type Specifications
+	Default State
+	Implementation Notes
+	approval_status
+	Enumeration
+	'Not Required'
+	Acceptable values: 'Not Required', 'Pending Restaurant Approval', 'Approved', 'Rejected', 'Expired'
+	created_by_type
+	String
+	Nullable
+	Polymorphic structural identifier (e.g., 'App\Models\User' versus 'App\Models\RestaurantOwner')
+	created_by_id
+	BigInt
+	Nullable
+	Relational ID corresponding to the created_by_type
+	approved_at
+	Timestamp
+	Null
+	Populated exactly at the moment of successful OTP validation
+	approved_via
+	String
+	Nullable
+	Descriptor of the verification vector (e.g., 'email_otp')
+	rejection_reason
+	Text
+	Nullable
+	Descriptive feedback provided by the restaurant upon denial
+	Gateway Database: Cryptographic OTP Storage
+To physically enforce the rate limiting and expiration parameters, a dedicated table must manage the complete lifecycle of the one-time passwords.1
+Table Designation
+	Column Name
+	Data Type Specifications
+	Relational Constraints and Notes
+	restaurant_approval_otps
+	id
+	BigInt (Unsigned)
+	Primary Key
+	
+
+	entity_type
+	String
+	Polymorphic mapping (e.g., 'App\Models\PromoCode')
+	
+
+	entity_id
+	BigInt (Unsigned)
+	Identifies the specific pending campaign
+	
+
+	restaurant_id
+	BigInt (Unsigned)
+	Foreign Key mapping to restaurants.id
+	
+
+	otp_code_hash
+	String
+	Cryptographically hashed representation of the plaintext code
+	
+
+	expires_at
+	Timestamp
+	Mathematically calculated as created_at + 10 minutes
+	
+
+	attempt_count
+	Integer
+	Initialized at 0. Triggers lockout if reaching 5.
+	
+
+	verified_at
+	Timestamp
+	Nullable. Populated upon successful validation to prevent reuse.
+	Gateway Database: Immutable Activity Logging
+The activity log ensures absolute transparency regarding the operational behavior of the Account Managers across the entire platform footprint.1
+Table Designation
+	Column Name
+	Data Type Specifications
+	Relational Constraints and Notes
+	account_manager_activity_logs
+	id
+	BigInt (Unsigned)
+	Primary Key
+	
+
+	am_id
+	BigInt (Unsigned)
+	Foreign Key mapping to users.id
+	
+
+	restaurant_id
+	BigInt (Unsigned)
+	Foreign Key mapping to restaurants.id
+	
+
+	action
+	String
+	Discrete action descriptor (e.g., 'created_promo', 'viewed_analytics')
+	
+
+	entity_type
+	String
+	Polymorphic relation type targeting the manipulated record
+	
+
+	entity_id
+	BigInt (Unsigned)
+	Polymorphic relation ID
+	
+
+	ip_address
+	String
+	Network tracking parameter for security audits
+	
+
+	created_at
+	Timestamp
+	Immutable execution time. No updated_at column is permitted.
+	Generative AI Agent Implementation Prompt
+The preceding architectural and functional analysis dictates the precise technical parameters required to execute the Account Manager multi-tenancy and OTP approval workflow safely and efficiently. The following is a highly structured, comprehensively detailed prompt engineered specifically to be fed directly into an OpenCode AI agent (or similar autonomous coding assistant) to facilitate the immediate, error-free full-stack development of this ecosystem, satisfying the core objective of this report.
+OpenCode Agent Prompt: Account Manager & OTP Approval Workflow Implementation
+System Role & Architectural Context
+You are assuming the role of a Principal Software Engineer specializing in highly scalable Laravel 13 microservices, modern Vue 3 web architectures, and high-performance Flutter mobile applications. You are tasked with developing the "Account Manager (AM) Approval Flow" for Khaalo (internally recognized as Welo), a pure aggregator platform designed for Tier 2 and Tier 3 markets.
+The platform operates on a mobile-primary (Flutter, Riverpod, Dio, Melos monorepo), decoupled microservice architecture (comprising a Laravel 13 API Gateway and a distinct Catalog Service, utilizing MySQL 8, Redis 7 for caching and queuing, and Laravel Reverb for WebSockets). The administrative panel is built utilizing Filament (powered by Vue 3 and Tailwind CSS 4). Current system directives dictate that SMS OTP capabilities are strictly disabled; therefore, you must engineer the system to utilize email-based OTPs exclusively for this approval flow.
+Core Development Objective
+You must engineer a highly secure, dynamically scoped multi-tenant system where a global Admin can assign multiple restaurant entities to a specific Account Manager. When the Account Manager leverages their localized dashboard to create an Advertisement (PPC, Card) or a Promotional Offer (Promo Codes, BOGO, Opt-In Campaigns) on behalf of these assigned restaurants, the entity must be programmatically prevented from going live. It must be forced into a Pending Restaurant Approval state. The entity may only transition to an Approved and active state after the restaurant owner validates a secure, 6-digit cryptographic OTP dispatched to their registered email, with the validation sequence occurring entirely within the Flutter mobile application.
+Execution Phase 1: Database Migrations and Schema Architecture (Laravel 13)
+Generate the exact Laravel migration files necessary to instantiate the following relational structures:
+1. Pivot Mapping Table: Generate a migration for account_manager_restaurant containing the columns: id (primary key), user_id (foreign key to users, representing the AM), restaurant_id (foreign key to restaurants), assigned_by (foreign key to users, representing the delegating admin), and standard timestamps().
+2. Cryptographic OTP Table: Generate a migration for restaurant_approval_otps containing the columns: id, entity_type (string, polymorphic), entity_id (unsigned big integer), restaurant_id (foreign key), otp_code_hash (string), expires_at (timestamp), attempt_count (integer, default value 0), and verified_at (nullable timestamp).
+3. Immutable Audit Table: Generate a migration for account_manager_activity_logs containing the columns: id, am_id (foreign key), restaurant_id (foreign key), action (string), entity_type (string), entity_id (unsigned big integer), ip_address (string, nullable), and created_at (timestamp). Do not include an updated_at column.
+4. Core Schema Augmentations: Generate migration files to structurally alter the existing ads and offers tables. You must add the enumeration column approval_status containing the permitted values: 'Not Required', 'Pending Restaurant Approval', 'Approved', 'Rejected', 'Expired'. The default value must be 'Not Required'. Furthermore, append the nullable fields: created_by_type (string), created_by_id (unsigned big int), approved_at (timestamp), approved_via (string), and rejection_reason (text).
+Execution Phase 2: Backend Logic and Filament Panel (Laravel 13)
+1. Dynamic Multi-Tenant Scoping: Implement a Laravel Global Scope class designated as TenantScope. This scope must automatically intercept and filter Eloquent queries within the Filament Admin panel. Program the logic such that if the authenticated user possesses the 'AccountManager' Spatie permission role, the scope appends a WHERE IN SQL clause restricting all returned data solely to the restaurant_id array dynamically fetched from the account_manager_restaurant pivot table.
+2. Creation Hook Interception: Override the standard mutateFormDataBeforeCreate method within the Filament CreateResource classes corresponding to Ads and Offers. If the user is identified as an Account Manager, the logic must forcefully overwrite the incoming payload to inject: approval_status = 'Pending Restaurant Approval', created_by_type = 'AccountManager', and created_by_id = auth()->id().
+3. Real-Time Event Broadcasting: Upon the successful database commit of a pending entity, configure the system to dispatch a custom RequiresRestaurantApproval event. Implement the necessary interfaces to broadcast this event via Laravel Reverb utilizing a private channel named private-restaurant.{id}.approvals. Simultaneously, configure a listener that dispatches a push notification payload via Firebase Cloud Messaging (FCM) to the restaurant owner's device tokens.
+4. API Gateway Endpoint Construction: Construct a dedicated API controller to service the mobile application requests:
+   * GET /api/v1/restaurants/{id}/approvals: Returns a JSON payload of all items currently in the pending state.
+   * POST /api/v1/approvals/generate-otp: This method must generate a secure 6-digit OTP string, apply Hash::make() to encrypt it, store the hash in the restaurant_approval_otps table with an expires_at timestamp set exactly 10 minutes in the future, and push an email notification onto the Redis queue utilizing Laravel Mailables. You must implement the Laravel RateLimiter facade on this route to enforce a maximum of 3 generation requests per 15-minute window per IP address and restaurant ID.
+   * POST /api/v1/approvals/verify-otp: This method validates the incoming OTP payload. If the hash comparison fails, you must increment the attempt_count. If attempt_count >= 5, return an HTTP 422 Unprocessable Entity response and permanently lock the OTP record. If the validation is successful, update the OTP verified_at column, transition the target Ad/Offer status to Approved, set approved_via = 'email_otp', insert an audit record into account_manager_activity_logs, and commit all changes utilizing a rigorous DB::transaction() closure.
+   * POST /api/v1/approvals/reject: Updates the target entity status to Rejected and stores the optional rejection_reason payload.
+Execution Phase 3: Mobile Frontend Implementation (Flutter & Riverpod)
+Write the corresponding Flutter Dart code, adhering strictly to the Khaalo design system constraints: enforce Dark Mode styling using a #0A0E1A background hex, utilize an 8px foundational grid system, and apply Space Grotesk fonts for headings alongside Inter fonts for body copy. All data models must be generated as immutable classes utilizing the Freezed package to handle robust JSON serialization.
+1. Asynchronous State Management: Architect a Riverpod AsyncNotifier named ApprovalsQueueNotifier responsible for fetching and caching the pending items from the API endpoint. It must listen for WebSocket invalidation events to trigger seamless background refreshes.
+2. UI Layout Construction: Build an ApprovalsScreen widget that renders the queue in a read-only list format. Each pending campaign card must surface two distinct interaction buttons: "Approve" and "Reject".
+3. OTP Dialog Execution Flow:
+   * When the "Approve" button is tapped, initiate a Dio POST request to the generate-otp endpoint.
+   * Render a modal dialog containing a bespoke 6-digit numeric input field and a 10-minute countdown timer managed by a separate Riverpod StateProvider.
+   * Upon the entry of the final digit, automatically execute the Dio request to the verify-otp endpoint.
+   * Implement comprehensive error handling utilizing Dio interceptors: If a 422 status code is returned indicating an incorrect OTP or rate limit hit, render the remaining attempt count in red typography and trigger a device vibration utilizing standard haptic feedback packages. Upon a successful 200 OK response, gracefully dismiss the modal dialog, render a success snackbar, and explicitly invalidate the ApprovalsQueueNotifier to refresh the UI and remove the approved item.
+4. Rejection Sequence: If the "Reject" button is tapped, surface a secondary dialog featuring an optional text input field to capture the rejection_reason. Submit this payload to the backend reject endpoint and refresh the pending queue accordingly.
+Strategic Technical Conclusions
+The implementation of the Account Manager organizational role and its corresponding OTP-gated approval workflow fundamentally transforms the Khaalo platform from a basic digital ordering catalog into a financially secure, enterprise-grade multi-tenant operational ecosystem. By engineering and enforcing a strict cryptographic division of labor—wherein Account Managers possess unrestricted creative capacity to build complex campaigns but maintain absolute zero activation authority—the system architecture comprehensively mitigates the severe financial and reputational risks inherently associated with delegated marketing.
+The utilization of Laravel's Global Scopes ensures that the multi-tenancy is hermetically sealed at the lowest database abstraction layer, protecting the platform against both malicious exploits and accidental data cross-contamination within the Vue 3 Administrative Panel. Concurrently, the deployment of an aggressively rate-limited, cryptographically hashed email OTP workflow operating within the high-performance Flutter mobile client ensures that the restaurant partner retains unassailable sovereign control over their public-facing promotions and subsequent financial liabilities. Furthermore, the mandatory, system-wide integration of the account_manager_activity_logs fortifies the ecosystem, providing an immutable ledger essential for future dispute resolution and granular operational audits. By adhering strictly to this comprehensive implementation blueprint, the engineering teams can rapidly deploy the highly requested Account Manager module while meticulously maintaining the rigorous performance, security, and architectural design standards foundational to the continued expansion of the Khaalo platform.
+Works cited
+1. memory.md
+2. Security Tip: OTPs Need Rate Limiting Too!, accessed on July 21, 2026, https://securinglaravel.com/security-tip-otps-need-rate-limiting-too/
+3. Authentication | Laravel 13.x - The clean stack for Artisans and agents, accessed on July 21, 2026, https://laravel.com/docs/13.x/authentication
+4. SuTechs/abcd_architecture_flutter: ABCD Architecture for Flutter - Easy & Fast Way to Start Your Flutter Project - GitHub, accessed on July 21, 2026, https://github.com/SuTechs/abcd_architecture_flutter
+5. Rizwan Mulla | Portfolio, accessed on July 21, 2026, https://rizwan-mulla-portfolio.vercel.app/
+6. Waguilar33/filament-guardian - GitHub, accessed on July 21, 2026, https://github.com/Waguilar33/filament-guardian
+7. Custom Dashboards - Filament, accessed on July 21, 2026, https://filamentphp.com/plugins/filament-custom-dashboards
+8. Filament v5 + Laravel 12: Production Admin Panel Guide (2026) - Bishrul Haq, accessed on July 21, 2026, https://bishrulhaq.com/posts/building-powerful-admin-panels-with-laravel-12-and-filament-v5-a-production-guide
+9. Shield - Filament, accessed on July 21, 2026, https://filamentphp.com/plugins/bezhansalleh-shield
+10. Tenancy for Laravel, accessed on July 21, 2026, https://tenancyforlaravel.com/
+11. Implementing Multi-Tenant Architecture in Laravel the Right Way | by Muhammad Azeem (Full-Stack Developer) | Medium, accessed on July 21, 2026, https://medium.com/@dev.muhammadazeem/%EF%B8%8F-implementing-multi-tenant-architecture-in-laravel-the-right-way-8518283c108c
+12. Building a Multi-Tenant Architecture Platform to Scale the Emmys - Laravel, accessed on July 21, 2026, https://laravel.com/blog/building-a-multi-tenant-architecture-platform-to-scale-the-emmys
+13. Multi Tenancy in Laravel : r/PHP - Reddit, accessed on July 21, 2026, https://www.reddit.com/r/PHP/comments/1co84yz/multi_tenancy_in_laravel/
+14. Flutter cybersecurity setup — structured into talking points + plug-in snippets + sample answers | by Punith S Uppar | Medium, accessed on July 21, 2026, https://medium.com/@punithsuppar7795/flutter-cybersecurity-setup-structured-into-talking-points-plug-in-snippets-sample-answers-4e5a283b787b
+15. otp/README.md at main · onestudio-os/otp - GitHub, accessed on July 21, 2026, https://github.com/onestudio-co/otp/blob/main/README.md
+16. Secure Your Laravel Apps with Two-Factor Authentication and Laravel Fortify | Twilio, accessed on July 21, 2026, https://www.twilio.com/en-us/blog/developers/tutorials/secure-your-laravel-apps-with-two-factor-authentication-and-laravel-fortify
+17. laravel-security | everything-claude-code, accessed on July 21, 2026, https://www.claudepluginhub.com/skills/siniyayousuf-everything-claude-code/laravel-security
