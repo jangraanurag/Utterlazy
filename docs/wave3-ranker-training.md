@@ -80,7 +80,20 @@ python3 services/ranker/evaluate.py --csv infra/ranker/dataset.csv \
 
 - Fails (exit 1) when AUC < `--min-auc` or when it does not beat the baseline by `--margin`.
 - Compares candidate vs baseline on the same dataset; use it before swapping served models.
-- Does not auto-promote or auto-rollback; deployment still moves the model file/env explicitly.
+### Promote / rollback
+
+```bash
+# promote only if the candidate clears the AUC gate and baseline margin
+python3 services/ranker/promote.py --candidate new.json --served model.json \
+  --csv infra/ranker/dataset.csv
+
+# roll back to the previous served model
+python3 services/ranker/promote.py --rollback --served model.json
+```
+
+Promotion copies the served model to `model.json.prev` and only then replaces it. Rollback
+archives the bad model as `model.json.rejected` and restores `.prev`. Automatic online rollback
+still needs production telemetry.
 
 ## Not done (deliberately)
 

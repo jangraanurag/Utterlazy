@@ -490,7 +490,8 @@ docker compose -f docker-compose.prod.yml --profile dispatch up -d dispatch-serv
 curl -s localhost:8004/api/dispatch/health
 ```
 
-- Stateless assign/batch API; geohash stands in for H3.
+- Stateless assign/batch API; geohash stands in for H3. Offer TTL/accept/expire policy is
+  implemented in-memory (30 self-test checks); persistent timers are not wired yet.
 - Do not route live orders to it until Redis GEO ingestion, offer timers and
   `dispatch.assignment.v1` are built and certified.
 
@@ -501,11 +502,15 @@ php artisan riders:tune-exploration --days=7            # preview
 php artisan riders:tune-exploration --days=7 --apply    # persist rider_exploration_every
 ```
 
-### Ranker guardrails
+### Ranker guardrails / promotion
 
 ```bash
 python3 services/ranker/evaluate.py --csv infra/ranker/dataset.csv \
   --model infra/ranker/model.json --baseline infra/ranker/previous.json
+
+python3 services/ranker/promote.py --candidate new.json --served model.json \
+  --csv infra/ranker/dataset.csv
+python3 services/ranker/promote.py --rollback --served model.json
 ```
 
 

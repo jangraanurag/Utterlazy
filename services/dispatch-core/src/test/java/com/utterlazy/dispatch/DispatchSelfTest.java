@@ -1,5 +1,7 @@
 package com.utterlazy.dispatch;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -12,6 +14,7 @@ public final class DispatchSelfTest {
         geo();
         policy();
         batching();
+        offers();
 
         System.out.println();
         if (fail > 0) {
@@ -108,6 +111,25 @@ public final class DispatchSelfTest {
             invalid = true;
         }
         check("batch: invalid max rejected", invalid);
+    }
+
+    private static void offers() {
+        var tracker = new OfferTracker(Duration.ofSeconds(120));
+        Instant now = Instant.parse("2026-10-22T10:00:00Z");
+        var offer = tracker.create("a-1", "o-1", "r-1", now);
+
+        check("offer: pending on create", offer.status() == OfferTracker.Status.PENDING);
+        check("offer: ttl is 120s", offer.expiresAt().equals(now.plusSeconds(120)));
+        check("offer: accept within ttl", tracker.accept("a-1", now.plusSeconds(30)));
+        check("offer: double accept rejected", !tracker.accept("a-1", now.plusSeconds(31)));
+        check("offer: pending riders excludes accepted", tracker.pendingRiders("o-1", now.plusSeconds(31)).isEmpty());
+
+        tracker.create("a-2", "o-1", "r-2", now);
+        check("offer: pending rider listed", tracker.pendingRiders("o-1", now.plusSeconds(10)).contains("r-2"));
+        check("offer: late accept rejected", !tracker.accept("a-2", now.plusSeconds(121)));
+        check("offer: expire due", tracker.expireDue(now.plusSeconds(122)) == 1);
+        check("offer: expire idempotent", tracker.expireDue(now.plusSeconds(123)) == 0);
+        check("offer: expired status", tracker.get("a-2").orElseThrow().status() == OfferTracker.Status.EXPIRED);
     }
 
     private static RiderCandidate rider(String id, double lat, double lng, boolean available, boolean verified,

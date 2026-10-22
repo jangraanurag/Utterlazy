@@ -595,3 +595,15 @@ outbox publisher, whatsapp-service + consumer, Redis queues for worker/scheduler
 - `ClickHouseFeatureExporter::asOf(timestamp, city, limit)`: per-restaurant orders/delivered/
   cancelled/GMV up to the timestamp; CSV export. Static attributes still join from MySQL.
 - `ranker:export-clickhouse` command; no ClickHouse running → command fails clearly.
+
+## 42. Offer timer policy (built)
+
+- `OfferTracker` (dispatch-core): TTL offers, accept/reject only while open, idempotent
+  `expireDue`, `pendingRiders(order)` for retry exclusion; 10 self-test checks.
+- Persistence (Redis/DB) and retry timer wiring remain for the live dispatch service.
+
+## 43. Model promote/rollback (built)
+
+- `promote.py` evaluates candidate vs served via `evaluate.py` (AUC gate + margin); on pass it
+  backs up served → `.prev` and promotes; rollback restores `.prev` and archives `.rejected`.
+- Tests: promotion, refusal of identical model, rollback round-trip.

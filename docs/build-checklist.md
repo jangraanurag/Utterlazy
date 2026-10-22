@@ -139,7 +139,8 @@
 - [ ] Orders DB split from catalog, shard key city_id (columns + `ShardRouter` groundwork done)
 - [x] Dispatch policy/batching core (geohash, scoring, exploration, batching; 20 checks)
 - [x] Dispatch REST service (assign/batch/health, MockMvc tests)
-- [ ] Redis GEO/H3 ingestion, offer timers, `dispatch.assignment.v1`, live assignment persistence
+- [x] Offer timer policy: TTL, accept/reject/expire, idempotent expiry, pending-rider exclusion (10 checks)
+- [ ] Redis GEO/H3 ingestion, persistent offer timers, `dispatch.assignment.v1`, live assignment persistence
 - [x] OpenSearch organic search: raw HTTP client, bulk indexer, `/search/fast`, MySQL fallback
 - [ ] Incremental index sync from catalog events + relevance tuning
 - [ ] Early-dispatch wait pay → platform (needs dispatch)
@@ -172,7 +173,8 @@
 - [x] Model serving gate: feature/metric validation, deterministic bucket, shadow mode, policy fallback
 - [x] `/rank` scoring/experiment/shadow telemetry + Laravel passthrough (`assignment_key`)
 - [x] ClickHouse as-of feature export (counts/GMV, city filter, CSV)
-- [ ] Full time-travel training join + online metrics + automatic rollback (offline AUC guardrails built)
+- [x] Guardrailed model promote/rollback tooling (`promote.py`, backup + `.rejected` archive)
+- [ ] Full time-travel training join + online metrics + automatic rollback
 
 ### 3.3 Remaining Wave 3
 - [x] ONDC seller protocol core: Ed25519 signed search, `on_search` catalog mapper, confirm NACKed

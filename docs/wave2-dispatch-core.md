@@ -12,7 +12,7 @@ without changing the policy contract.
 | `RiderCandidate` | availability/verification, active load, acceptance, ping freshness, trips |
 | `DispatchPolicy` | eligibility filters, distance/workload/acceptance/freshness scoring, new-rider exploration |
 | `BatchPlanner` | greedy 1–3 order batches by pickup/drop proximity |
-| Self-test | **20 checks** (`./scripts/dispatch_core_test.sh`) |
+| Self-test | **30 checks** (`./scripts/dispatch_core_test.sh`) |
 | Spring service | `POST /api/dispatch/assign`, `POST /api/dispatch/batch`, `GET /api/dispatch/health` (profile `dispatch`, port 8004) |
 
 ## Policy
@@ -40,7 +40,8 @@ The REST tier is stateless policy evaluation. Still not built:
 
 - Redis GEO/H3 storage and live rider location ingestion
 - Kafka `dispatch.assignment.v1` producer/consumer
-- offer timers, retries, surge integration, ETA/cost coupling
+- persistent offer timers (Redis/DB), retries, surge integration, ETA/cost coupling
+  (the in-memory TTL/accept/expire policy is built and tested)
 - routing to actual riders / order assignment persistence
 
 ## Sharding groundwork
