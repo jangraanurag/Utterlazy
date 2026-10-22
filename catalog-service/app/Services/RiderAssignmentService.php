@@ -236,10 +236,13 @@ class RiderAssignmentService
             ->when(! empty($excludeIds), fn ($q) => $q->whereNotIn('id', $excludeIds))
             ->get();
 
-        // Exploration floor: every 8th order prefers riders with < 20 trips,
+        // Exploration floor: every Nth order prefers riders with < 20 trips,
         // if any are inside the same radius. Not a penalty to seniors — a
-        // floor against new-rider starvation.
-        if ($freeRiders->isNotEmpty() && (crc32((string) $order->id) % 8 === 0)) {
+        // floor against new-rider starvation. N is tuned from assignment data.
+        $explorationEvery = (int) (SystemConfig::where('config_key', 'rider_exploration_every')->value('config_value') ?? 8);
+
+        if ($freeRiders->isNotEmpty() && $explorationEvery > 0
+            && (crc32((string) $order->id) % $explorationEvery === 0)) {
             $newRiders = $freeRiders->filter(fn ($rider) => (int) $rider->total_deliveries < 20);
 
             if ($newRiders->isNotEmpty()) {

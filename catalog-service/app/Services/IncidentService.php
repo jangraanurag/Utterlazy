@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\OpsIncident;
 use App\Models\OpsShift;
+use App\Models\OrgRole;
 use App\Models\User;
 use App\Services\OutboxPublisher;
 use DomainException;
@@ -212,6 +213,17 @@ class IncidentService
 
         if ($onShift?->user) {
             return $onShift->user;
+        }
+
+        $backup = OrgRole::where('is_active', true)
+            ->whereNotNull('backup_user_id')
+            ->whereHas('assignedUser', fn ($q) => $q->where('is_admin', true)->where('admin_role', $role))
+            ->with('backupUser')
+            ->first()
+            ?->backupUser;
+
+        if ($backup && $backup->is_admin) {
+            return $backup;
         }
 
         return User::where('is_admin', true)

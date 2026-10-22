@@ -339,7 +339,7 @@ Vendor Dashboard card. Ads/promotions never alter the metric.
 
 ### 12.6 Event bus verification
 `tests/wave1_smoke.php` injects a fake `OutboxTransport`: publish once, no republish,
-attempts increment, max-retry → DLQ, exhausted rows never retried. 307/307 PASS.
+attempts increment, max-retry → DLQ, exhausted rows never retried. 313/313 PASS.
 
 ### 12.7 Production topology
 `docker-compose.prod.yml`: 3-broker KRaft Kafka (`replication=3`, `min.insync=2`, 12 partitions),
@@ -567,3 +567,18 @@ outbox publisher, whatsapp-service + consumer, Redis queues for worker/scheduler
 ## 37. Shard routing groundwork (built)
 
 - `ShardRouter` SHA-256 city→shard, deterministic/range-tested; primitive for the future orders DB split.
+
+## 38. Dispatch REST service (built)
+
+- Spring Boot adapter over dispatch-core: `POST /api/dispatch/assign` (ranked candidates with
+  breakdown), `POST /api/dispatch/batch` (1–3 order batches), `GET /api/dispatch/health`.
+- Stateless; port 8004; compose profile `dispatch`; MockMvc tests (4).
+- Redis GEO ingestion, offer timers and `dispatch.assignment.v1` remain for the live dispatch service.
+
+## 39. Exploration tuning + guardrails (built)
+
+- `ExplorationTuner` recommends `rider_exploration_every` from the observed share of assignments
+  to <20-trip riders (cold start uses baseline 8); `riders:tune-exploration --apply` persists to
+  SystemConfig and assignment reads it.
+- `services/ranker/evaluate.py` gate: AUC ≥ min and ≥ baseline + margin; exits non-zero on failure.
+- Incident escalation now prefers on-shift lead → OrgRole backup → any role holder.

@@ -96,6 +96,10 @@ jobs:
         working-directory: services/order-command-core
         run: mvn -B test
 
+      - name: Dispatch service tests (MockMvc)
+        working-directory: services/dispatch-core
+        run: mvn -B test
+
   pricing-parity:
     runs-on: ubuntu-latest
     steps:

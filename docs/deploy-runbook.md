@@ -478,13 +478,31 @@ curl "http://127.0.0.1:8001/api/search/fast?q=biryani"
 
 ---
 
-## 25. Dispatch core (groundwork)
+## 25. Dispatch service + tuning
 
 ```bash
 ./scripts/dispatch_core_test.sh
 ```
 
-- Pure policy/batching module; no production dispatch service yet.
-- Geohash stands in for H3; swapping the cell key does not change the scoring contract.
-- Do not route live orders to it until the Spring adapter, Redis GEO ingestion and
+```bash
+docker compose -f docker-compose.prod.yml --profile dispatch up -d dispatch-service
+curl -s localhost:8004/api/dispatch/health
+```
+
+- Stateless assign/batch API; geohash stands in for H3.
+- Do not route live orders to it until Redis GEO ingestion, offer timers and
   `dispatch.assignment.v1` are built and certified.
+
+### Exploration tuning
+
+```bash
+php artisan riders:tune-exploration --days=7            # preview
+php artisan riders:tune-exploration --days=7 --apply    # persist rider_exploration_every
+```
+
+### Ranker guardrails
+
+```bash
+python3 services/ranker/evaluate.py --csv infra/ranker/dataset.csv \
+  --model infra/ranker/model.json --baseline infra/ranker/previous.json
+```

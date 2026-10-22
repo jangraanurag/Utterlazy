@@ -13,6 +13,7 @@ without changing the policy contract.
 | `DispatchPolicy` | eligibility filters, distance/workload/acceptance/freshness scoring, new-rider exploration |
 | `BatchPlanner` | greedy 1–3 order batches by pickup/drop proximity |
 | Self-test | **20 checks** (`./scripts/dispatch_core_test.sh`) |
+| Spring service | `POST /api/dispatch/assign`, `POST /api/dispatch/batch`, `GET /api/dispatch/health` (profile `dispatch`, port 8004) |
 
 ## Policy
 
@@ -28,14 +29,19 @@ without changing the policy contract.
 Pickups within `pickupRadiusKm` and drops within `dropRadiusKm` can share a rider,
 up to 3 orders (configurable 1–3). Input order is preserved for determinism.
 
-## Deliberately not built here
+## Run the service
+
+```bash
+docker compose -f docker-compose.prod.yml --profile dispatch up -d dispatch-service
+curl -s localhost:8004/api/dispatch/health
+```
+
+The REST tier is stateless policy evaluation. Still not built:
 
 - Redis GEO/H3 storage and live rider location ingestion
 - Kafka `dispatch.assignment.v1` producer/consumer
 - offer timers, retries, surge integration, ETA/cost coupling
-- Java Spring adapter and routing to actual riders
-
-Those are the Wave 2 dispatch service; this module is the tested policy core it will call.
+- routing to actual riders / order assignment persistence
 
 ## Sharding groundwork
 

@@ -130,6 +130,16 @@ $schema->create('org_units', function (Blueprint $t) {
     $t->timestamps();
 });
 
+$schema->create('org_roles', function (Blueprint $t) {
+    $t->uuid('id')->primary();
+    $t->uuid('org_unit_id')->nullable();
+    $t->string('title')->nullable();
+    $t->uuid('assigned_user_id')->nullable();
+    $t->uuid('backup_user_id')->nullable();
+    $t->boolean('is_active')->default(true);
+    $t->timestamps();
+});
+
 $schema->create('projected_orders', function (Blueprint $t) {
     $t->string('order_id', 36)->primary();
     $t->uuid('user_id')->nullable();
@@ -1506,6 +1516,30 @@ $cityIncident = $incidentSvc->create([
 $cityIncident->update(['sla_due_at' => now()->subMinutes(1)]);
 $incidentSvc->markBreaches();
 check('incident escalation: on-shift lead owns city incident', $cityIncident->fresh()->owner_user_id === $onCallLead->id);
+
+$assignedLead = User::create([
+    'name' => 'Assigned Lead', 'email' => 'assigned-'.uniqid().'@test.local',
+    'is_admin' => true, 'admin_role' => 'support_lead',
+]);
+$backupLead = User::create([
+    'name' => 'Backup Lead', 'email' => 'backup-'.uniqid().'@test.local',
+    'is_admin' => true, 'admin_role' => 'support_lead',
+]);
+\App\Models\OrgRole::create([
+    'org_unit_id' => (string) $uuid(),
+    'title' => 'Support Lead (with backup)',
+    'assigned_user_id' => $assignedLead->id,
+    'backup_user_id' => $backupLead->id,
+    'is_active' => true,
+]);
+
+$backupCity = (string) $uuid();
+$backupIncident = $incidentSvc->create([
+    'severity' => 'sev2', 'category' => 'infra', 'title' => 'Backup on-call check', 'city_id' => $backupCity,
+], $buyer);
+$backupIncident->update(['sla_due_at' => now()->subMinutes(1)]);
+$incidentSvc->markBreaches();
+check('incident escalation: OrgRole backup owns city incident', $backupIncident->fresh()->owner_user_id === $backupLead->id);
 check('roles: whatsapp_ops views incidents only', in_array('incidents.view', $perms['whatsapp_ops'], true)
     && ! in_array('incidents.manage', $perms['whatsapp_ops'], true));
 check('roles: auditor views but cannot manage', in_array('incidents.view', $perms['auditor'], true)
@@ -1779,6 +1813,21 @@ $doc = \App\Services\Search\RestaurantSearchDocument::build([
 ]);
 check('search doc: location mapped', $doc['location'] === ['lat' => 22.7, 'lon' => 75.8]);
 check('search doc: open flag', $doc['is_accepting_orders'] === true);
+
+echo "=== Rider exploration tuning ===\n";
+
+$tuner = new \App\Services\Rider\ExplorationTuner();
+
+$low = $tuner->recommend(1000, 50, 12.5);
+check('tuning: low share explores more', $low['every'] === 4 && $low['current_pct'] === 5.0);
+$inBand = $tuner->recommend(1000, 130, 12.5);
+check('tuning: in-band keeps baseline', $inBand['every'] === 8);
+$high = $tuner->recommend(1000, 300, 12.5);
+check('tuning: high share backs off', $high['every'] === 16);
+$cold = $tuner->recommend(10, 2, 12.5);
+check('tuning: insufficient data flagged', $cold['insufficient_data'] === true && $cold['every'] === 8);
+$clamped = $tuner->recommend(100, 10, 0.0);
+check('tuning: target clamped', $clamped['target_pct'] === 1.0);
 
 echo "=== Cutover readiness gate ===\n";
 

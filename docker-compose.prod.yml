@@ -291,6 +291,19 @@ services:
       kafka-2: { condition: service_started }
       kafka-3: { condition: service_started }
 
+  dispatch-service:
+    # Wave 2 dispatch policy API (no Redis GEO/assignment persistence yet).
+    profiles: ["dispatch"]
+    build:
+      context: ./services/dispatch-core
+      dockerfile: Dockerfile
+    container_name: utterlazy-dispatch-service
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8004:8004"
+    environment:
+      SERVER_PORT: 8004
+
   opensearch:
     # Wave 2 organic search. Enable with: docker compose ... --profile search up -d opensearch
     profiles: ["search"]

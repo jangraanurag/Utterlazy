@@ -20,7 +20,7 @@ Exit code is non-zero on any FAIL. **SKIP is not a pass.**
 
 | Gate | Proves |
 |---|---|
-| PHP wave1 smoke (307 checks) | outbox, idempotency, placements, reversal, refund retry, cities, analytics, incidents, shifts, SOS, ONDC, OTP, dataset features |
+| PHP wave1 smoke (313 checks) | outbox, idempotency, placements, reversal, refund retry, cities, analytics, incidents, shifts, SOS, ONDC, OTP, dataset features |
 | WhatsApp helper tests + boot | phone normalization, state wiring, routes, boot |
 | Pricing parity (PHP → Java) | 10 golden vectors, persisted money fields identical |
 | Order-command core self-test | state machine, idempotency, pricing snapshot, transitions |
@@ -56,7 +56,7 @@ Exit code is non-zero on any FAIL. **SKIP is not a pass.**
 
 `.github/workflows/wave1-gates.yml` runs the same class of gates on every PR:
 
-- `php-lint-and-smoke` — PHP lint + 307-check smoke + WhatsApp boot/tests
+- `php-lint-and-smoke` — PHP lint + 313-check smoke + WhatsApp boot/tests
 - `order-command` — core self-test + Spring adapter tests
 - `pricing-parity` — PHP golden vectors → Java
 - `ranker-tests` — core + API + trainer

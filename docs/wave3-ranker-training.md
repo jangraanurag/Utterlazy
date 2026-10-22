@@ -71,6 +71,17 @@ python3 -m unittest discover -s tests -v   # 22 tests: ranking, API, trainer
 Trainer tests use synthetic separable data and assert test accuracy > 0.75 and AUC > 0.78,
 plus a preference check between a clearly good and clearly bad restaurant.
 
+## Guardrails (built)
+
+```bash
+python3 services/ranker/evaluate.py --csv infra/ranker/dataset.csv \
+  --model infra/ranker/model.json --min-auc 0.6 --baseline infra/ranker/previous.json
+```
+
+- Fails (exit 1) when AUC < `--min-auc` or when it does not beat the baseline by `--margin`.
+- Compares candidate vs baseline on the same dataset; use it before swapping served models.
+- Does not auto-promote or auto-rollback; deployment still moves the model file/env explicitly.
+
 ## Not done (deliberately)
 
 - Serving the trained model in `ranking.py`

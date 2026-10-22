@@ -58,7 +58,7 @@
 - [x] Impression/click → Kafka + `spent_today` + idempotent click charging
 - [x] Auto-pause on budget exhaustion (scheduler every 5 min + on click); daily budget rollover
 - [x] Floor edit audited; never rewrites `pinned_floor`
-- [x] Test: unpaid absent, paid present, sponsored=true, bid-below-floor excluded, budget-exhausted excluded (smoke 307/307)
+- [x] Test: unpaid absent, paid present, sponsored=true, bid-below-floor excluded, budget-exhausted excluded (smoke 313/313)
 
 ### 1.5 Admin roles + screens
 - [x] `AdminAuth` roles: support_l1, support_l2, support_lead, city_ops, rider_ops, catalog_ops, onboarding_agent, ads_ops, whatsapp_ops, fraud_analyst, growth, auditor
@@ -75,7 +75,7 @@
 - [x] One-command certification: `MODE=offline|staging ./scripts/certify.sh` (Markdown + JSON report)
 - [x] Offline run: 11 PASS / 0 FAIL / 2 SKIP (docker absent, staging offline); CI covers Maven/frontends
 - [x] CI workflow `.github/workflows/wave1-gates.yml`: PHP lint + smoke, WhatsApp boot, Java core + adapter tests, frontend builds, compose validation
-- [x] Publisher restart/retry/DLQ semantics proven with injected transport (307/307 smoke)
+- [x] Publisher restart/retry/DLQ semantics proven with injected transport (313/313 smoke)
 - [x] Marketing opt-out blocks push, not status (consent model separated)
 - [x] Existing app checkout unchanged (no `channel`) still works
 - [x] PHP lint clean on changed files
@@ -138,7 +138,8 @@
 - [x] Idempotency store in order service (unique user+key, replay-safe)
 - [ ] Orders DB split from catalog, shard key city_id (columns + `ShardRouter` groundwork done)
 - [x] Dispatch policy/batching core (geohash, scoring, exploration, batching; 20 checks)
-- [ ] H3/Redis GEO integration, offer timers, `dispatch.assignment.v1` (dispatch service)
+- [x] Dispatch REST service (assign/batch/health, MockMvc tests)
+- [ ] Redis GEO/H3 ingestion, offer timers, `dispatch.assignment.v1`, live assignment persistence
 - [x] OpenSearch organic search: raw HTTP client, bulk indexer, `/search/fast`, MySQL fallback
 - [ ] Incremental index sync from catalog events + relevance tuning
 - [ ] Early-dispatch wait pay → platform (needs dispatch)
@@ -155,7 +156,7 @@
 - [x] `AnalyticsProjector`: outbox → facts, one row per event, failed inserts retried
 - [x] `analytics:project` command every minute (no-op when disabled) + `analytics_projected_events`
 - [x] `--profile analytics` ClickHouse container in dev + prod
-- [x] Tests: 3 event types, replay no-op, sink failure retry, disabled no-op (307/307 smoke)
+- [x] Tests: 3 event types, replay no-op, sink failure retry, disabled no-op (313/313 smoke)
 - [x] Command Center daily facts from ClickHouse `city_daily` with MySQL fallback + `metrics_source` label
 - [x] `city_daily_mv` materialized view from `order_events` (backfill SQL documented)
 
@@ -170,13 +171,13 @@
 - [x] Trainer tests (5) + `scripts/ranker_train.sh`; model intentionally not served yet
 - [x] Model serving gate: feature/metric validation, deterministic bucket, shadow mode, policy fallback
 - [x] `/rank` scoring/experiment/shadow telemetry + Laravel passthrough (`assignment_key`)
-- [ ] Time-travel feature store + online guardrail metrics + automatic rollback
+- [ ] Time-travel feature store + online metrics + automatic rollback (offline AUC guardrails built)
 
 ### 3.3 Remaining Wave 3
 - [x] ONDC seller protocol core: Ed25519 signed search, `on_search` catalog mapper, confirm NACKed
 - [x] ONDC outbound signed callbacks (queued, retries, injectable transport, tests)
 - [ ] ONDC select/init/confirm lifecycle, payments/RTO (requires certification)
-- [ ] Rider exploration slots tuned from data
+- [x] Exploration frequency tuned from assignment data (`riders:tune-exploration`, SystemConfig-driven)
 - [x] Per-city incident console: SEV1–3 SLA clocks, owner, ack/resolve/assign, audit + `ops.incident.v1`
 - [x] Incident sweep every minute (breach once), Command Center counts, admin Vue page, role matrix
 
@@ -186,7 +187,8 @@
 - [x] Auto-generated weekly rotations (`shifts:rotate`, dry-run default, overlap-safe, gap reporting)
 - [x] Rotation gaps → owned SEV3 `staffing` incidents (deduped), support_lead assignment
 - [x] Incident escalation: 50% SLA at-risk (level 1) + breach (level 2), team ownership, idempotent events
-- [x] On-call lead selection: on-shift support_lead for the incident city, then role fallback
+- [x] On-call lead selection: on-shift support_lead → OrgRole backup → role fallback (named second level)
+- [x] Ranker guardrails: evaluate candidate vs baseline (AUC gate + margin), non-zero on failure
 - [x] PII access/export audit log (append-only, mandatory for instrumented admin exports)
 - [x] Auditor API + Admin **PII Audit** page (audit.view; read-only)
 - [x] Manual retention command: dry-run default, `--confirm=DELETE`, min 30 days, chunked, run history

@@ -1,0 +1,10 @@
+server:
+  port: ${SERVER_PORT:8004}
+
+spring:
+  application:
+    name: dispatch
+
+logging:
+  level:
+    com.utterlazy.dispatch: INFO
