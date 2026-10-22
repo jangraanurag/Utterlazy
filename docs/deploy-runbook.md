@@ -328,6 +328,7 @@ Rules:
 - Keep `ONDC_ENABLED=false` until registry onboarding and signed callback transport exist.
 - When testing search: set subscriber/key/private key + `ONDC_REGISTRY_KEYS`, enable, and send a
   signed request. Failures return `401 INVALID_SIGNATURE` and log the transaction id.
+- `select`/`init` return quotes/terms only; no order is created. `confirm` stays NACKed.
 - Outbound callbacks: set `ONDC_CALLBACK_ENABLED=true` only after `bap_uri` is verified and the
   queue worker is running. Each callback is freshly signed.
 - `confirm` intentionally returns `501 ONDC_CONFIRM_NOT_ENABLED`. Do not bypass it; ONDC order
@@ -506,3 +507,17 @@ php artisan riders:tune-exploration --days=7 --apply    # persist rider_explorat
 python3 services/ranker/evaluate.py --csv infra/ranker/dataset.csv \
   --model infra/ranker/model.json --baseline infra/ranker/previous.json
 ```
+
+
+---
+
+## 26. Time-travel ranker features
+
+```bash
+php artisan ranker:export-clickhouse --as-of=2026-10-01T00:00:00Z --city=<uuid> \
+  --out=infra/ranker/asof.csv
+```
+
+- Counts/GMV per restaurant up to the timestamp (ClickHouse `order_events`).
+- Static attributes (rating, prep, price) still need a MySQL join before training.
+- Requires the analytics profile/ClickHouse reachable.

@@ -7,6 +7,8 @@ use App\Models\MenuItem;
 use App\Models\Restaurant;
 use App\Jobs\SendOndcCallback;
 use App\Services\Ondc\OndcCatalogMapper;
+use App\Services\Ondc\OndcOrderMapper;
+use App\Services\Pricing\PricingParityService;
 use App\Services\Ondc\OndcVerifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -23,8 +25,10 @@ use Illuminate\Support\Facades\Log;
  */
 class OndcController extends Controller
 {
-    public function __construct(private readonly OndcCatalogMapper $mapper)
-    {
+    public function __construct(
+        private readonly OndcCatalogMapper $mapper,
+        private readonly OndcOrderMapper $orders,
+    ) {
     }
 
     public function search(Request $request)
@@ -41,18 +45,9 @@ class OndcController extends Controller
             return $this->nack('INVALID_CONTEXT', 'Missing context: '.implode(', ', $missing), 422);
         }
 
-        if (config('services.ondc.require_signature', true)) {
-            $verifier = new OndcVerifier($this->registryKeys());
-            $result = $verifier->verify((string) $request->header('Authorization', ''), $request->getContent());
-
-            if (! $result['ok']) {
-                Log::warning('ONDC search signature rejected', [
-                    'transaction_id' => $context['transaction_id'] ?? null,
-                    'error' => $result['error'] ?? 'unknown',
-                ]);
-
-                return $this->nack('INVALID_SIGNATURE', 'Signature rejected: '.($result['error'] ?? 'unknown'), 401);
-            }
+        $signature = $this->verifySignature($request, $context);
+        if ($signature !== null) {
+            return $signature;
         }
 
         $intent = $payload['message']['intent'] ?? [];
@@ -95,14 +90,125 @@ class OndcController extends Controller
             'bpp_uri' => config('services.ondc.bpp_uri'),
         ]);
 
-        if (config('services.ondc.callback_enabled') && ! empty($context['bap_uri'])) {
-            SendOndcCallback::dispatch($onSearch, (string) $context['bap_uri']);
-        }
+        $this->dispatchCallback($onSearch, $context);
 
         return response()->json([
             'context' => $onSearch['context'],
             'message' => ['ack' => ['status' => 'ACK']],
             'on_search' => $onSearch,
+        ]);
+    }
+
+    public function select(Request $request)
+    {
+        if (! config('services.ondc.enabled')) {
+            return $this->nack('ONDC_DISABLED', 'ONDC adapter is disabled.', 503);
+        }
+
+        $payload = $request->json()->all();
+        $context = $payload['context'] ?? [];
+        $missing = $this->missingContext($context, 'select');
+        if ($missing !== []) {
+            return $this->nack('INVALID_CONTEXT', 'Missing context: '.implode(', ', $missing), 422);
+        }
+
+        $signature = $this->verifySignature($request, $context);
+        if ($signature !== null) {
+            return $signature;
+        }
+
+        $order = $payload['message']['order'] ?? [];
+        $providerId = $order['provider']['id'] ?? null;
+        $requested = $order['items'] ?? [];
+
+        if (! $providerId || ! is_array($requested) || $requested === []) {
+            return $this->nack('INVALID_ORDER', 'provider.id and items are required.', 422);
+        }
+
+        $menuItems = MenuItem::whereIn('id', array_column($requested, 'id'))->get()->keyBy('id');
+        $items = [];
+        $subtotal = 0.0;
+
+        foreach ($requested as $line) {
+            $menuItem = $menuItems->get($line['id'] ?? '');
+            $qty = max(1, min(20, (int) ($line['quantity'] ?? 1)));
+
+            if (! $menuItem) {
+                return $this->nack('ITEM_NOT_FOUND', 'Unknown item: '.($line['id'] ?? '?'), 422);
+            }
+
+            $price = (float) $menuItem->price;
+            $subtotal += $price * $qty;
+            $items[] = [
+                'id' => $menuItem->id,
+                'descriptor' => ['name' => $menuItem->name],
+                'quantity' => ['count' => $qty],
+                'price' => ['currency' => 'INR', 'value' => number_format($price, 2, '.', '')],
+                'fulfillment_id' => 'F1',
+            ];
+        }
+
+        $quote = app(PricingParityService::class)->calculate([
+            'subtotal' => $subtotal,
+            'vendor_discount_rate' => 0.0,
+            'tax_rate' => 5.0,
+            'delivery_min' => 10.0,
+            'delivery_max' => 50.0,
+            'delivery_estimate' => 27.0,
+            'delivery_free_above' => 500.0,
+            'platform_fee' => 0.0,
+            'coupon' => 0.0,
+            'tip' => 0.0,
+            'commission_rate' => 0.0,
+            'commission_gst_rate' => 0.0,
+        ]);
+
+        $onSelect = $this->orders->onSelect($context, ['id' => $providerId], $items, [
+            'items' => (float) $quote['subtotal'],
+            'tax' => (float) $quote['tax'],
+            'delivery' => (float) $quote['delivery_fee'],
+            'total' => (float) $quote['grand_total'],
+        ], now()->toIso8601String(), $this->callbackMeta());
+
+        $this->dispatchCallback($onSelect, $context);
+
+        return response()->json([
+            'context' => $onSelect['context'],
+            'message' => ['ack' => ['status' => 'ACK']],
+            'on_select' => $onSelect,
+        ]);
+    }
+
+    public function init(Request $request)
+    {
+        if (! config('services.ondc.enabled')) {
+            return $this->nack('ONDC_DISABLED', 'ONDC adapter is disabled.', 503);
+        }
+
+        $payload = $request->json()->all();
+        $context = $payload['context'] ?? [];
+        $missing = $this->missingContext($context, 'init');
+        if ($missing !== []) {
+            return $this->nack('INVALID_CONTEXT', 'Missing context: '.implode(', ', $missing), 422);
+        }
+
+        $signature = $this->verifySignature($request, $context);
+        if ($signature !== null) {
+            return $signature;
+        }
+
+        $order = $payload['message']['order'] ?? [];
+        if (! isset($order['provider']['id'], $order['items'])) {
+            return $this->nack('INVALID_ORDER', 'provider.id and items are required.', 422);
+        }
+
+        $onInit = $this->orders->onInit($context, $order, now()->toIso8601String(), $this->callbackMeta());
+        $this->dispatchCallback($onInit, $context);
+
+        return response()->json([
+            'context' => $onInit['context'],
+            'message' => ['ack' => ['status' => 'ACK']],
+            'on_init' => $onInit,
         ]);
     }
 
@@ -119,7 +225,7 @@ class OndcController extends Controller
         );
     }
 
-    private function missingContext(array $context): array
+    private function missingContext(array $context, string $expectedAction = 'search'): array
     {
         $required = ['domain', 'action', 'country', 'city', 'bap_id', 'bap_uri', 'transaction_id', 'message_id', 'timestamp'];
         $missing = [];
@@ -130,11 +236,47 @@ class OndcController extends Controller
             }
         }
 
-        if (($context['action'] ?? null) !== 'search') {
-            $missing[] = 'action(search)';
+        if (($context['action'] ?? null) !== $expectedAction) {
+            $missing[] = 'action('.$expectedAction.')';
         }
 
         return $missing;
+    }
+
+    private function verifySignature(Request $request, array $context): ?\Illuminate\Http\JsonResponse
+    {
+        if (! config('services.ondc.require_signature', true)) {
+            return null;
+        }
+
+        $verifier = new OndcVerifier($this->registryKeys());
+        $result = $verifier->verify((string) $request->header('Authorization', ''), $request->getContent());
+
+        if (! $result['ok']) {
+            Log::warning('ONDC signature rejected', [
+                'transaction_id' => $context['transaction_id'] ?? null,
+                'error' => $result['error'] ?? 'unknown',
+            ]);
+
+            return $this->nack('INVALID_SIGNATURE', 'Signature rejected: '.($result['error'] ?? 'unknown'), 401);
+        }
+
+        return null;
+    }
+
+    private function callbackMeta(): array
+    {
+        return [
+            'bpp_id' => config('services.ondc.bpp_id'),
+            'bpp_uri' => config('services.ondc.bpp_uri'),
+        ];
+    }
+
+    private function dispatchCallback(array $payload, array $context): void
+    {
+        if (config('services.ondc.callback_enabled') && ! empty($context['bap_uri'])) {
+            SendOndcCallback::dispatch($payload, (string) $context['bap_uri']);
+        }
     }
 
     /** @return array<string, string> */

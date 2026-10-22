@@ -339,7 +339,7 @@ Vendor Dashboard card. Ads/promotions never alter the metric.
 
 ### 12.6 Event bus verification
 `tests/wave1_smoke.php` injects a fake `OutboxTransport`: publish once, no republish,
-attempts increment, max-retry → DLQ, exhausted rows never retried. 313/313 PASS.
+attempts increment, max-retry → DLQ, exhausted rows never retried. 325/325 PASS.
 
 ### 12.7 Production topology
 `docker-compose.prod.yml`: 3-broker KRaft Kafka (`replication=3`, `min.insync=2`, 12 partitions),
@@ -582,3 +582,16 @@ outbox publisher, whatsapp-service + consumer, Redis queues for worker/scheduler
   SystemConfig and assignment reads it.
 - `services/ranker/evaluate.py` gate: AUC ≥ min and ≥ baseline + margin; exits non-zero on failure.
 - Incident escalation now prefers on-shift lead → OrgRole backup → any role holder.
+
+## 40. ONDC select/init (built)
+
+- `OndcController::select`: signed context, menu lookup, quote via PricingParityService
+  (items+tax+delivery), `on_select`, optional signed callback. No order writes.
+- `OndcController::init`: `on_init` with `ON-ORDER` payment terms. No order writes.
+- `OndcOrderMapper` pure builders; `confirm` remains `501 ONDC_CONFIRM_NOT_ENABLED`.
+
+## 41. ClickHouse time-travel features (v1, built)
+
+- `ClickHouseFeatureExporter::asOf(timestamp, city, limit)`: per-restaurant orders/delivered/
+  cancelled/GMV up to the timestamp; CSV export. Static attributes still join from MySQL.
+- `ranker:export-clickhouse` command; no ClickHouse running → command fails clearly.

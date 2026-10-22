@@ -51,7 +51,7 @@ skip_gate() { record "$1" SKIP "$2"; }
 printf '\n=== UtterLazy certification (%s) ===\n\n' "${MODE}"
 
 # ─── Static / offline gates ──────────────────────────────────────────────────
-run_gate "PHP wave1 smoke (313 checks)" bash -c 'cd catalog-service && php tests/wave1_smoke.php'
+run_gate "PHP wave1 smoke (325 checks)" bash -c 'cd catalog-service && php tests/wave1_smoke.php'
 run_gate "WhatsApp helper tests" bash -c 'cd whatsapp-service && php tests/phone_normalizer_test.php'
 run_gate "WhatsApp boot + routes" bash -c 'cd whatsapp-service && php artisan route:list > /dev/null'
 run_gate "Pricing parity (PHP → Java)" ./scripts/pricing_parity.sh

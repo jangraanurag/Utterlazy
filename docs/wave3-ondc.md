@@ -9,6 +9,8 @@ parity are certified.
 | Method | Path | Behaviour |
 |---|---|---|
 | POST | `/api/ondc/search` | verifies Ed25519 signature, returns `on_search`, queues a signed callback (when enabled) |
+| POST | `/api/ondc/select` | quotes items/tax/delivery, returns `on_select` (no order) |
+| POST | `/api/ondc/init` | returns `on_init` payment terms (no order) |
 | POST | `/api/ondc/confirm` | always NACK while disabled |
 
 Disabled by default (`ONDC_ENABLED=false` → `503 ONDC_DISABLED`).
@@ -69,9 +71,16 @@ POSTs the `on_search` payload to `context.bap_uri` with a fresh Ed25519 `Authori
 expired window, malformed header, provider/gps/price/fulfilment mapping, and `on_search`
 context/action/bpp fields.
 
+## Select / init (built)
+
+`select` validates a signed request, loads menu items, computes an INR quote
+(items + 5% tax + delivery) and returns `on_select`. `init` echoes the order with
+`ON-ORDER` payment terms and returns `on_init`. Both queue signed callbacks when enabled.
+Neither writes an order.
+
 ## Explicitly not done
 
-- `select` / `init` / `confirm` order lifecycle
+- `confirm` order creation (always NACKed until payment/fulfilment/RTO parity is certified)
 - ONDC payment, cancellation, and RTO flows
 - registry onboarding/subscription handshake
 

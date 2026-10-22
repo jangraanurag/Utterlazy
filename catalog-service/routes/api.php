@@ -155,6 +155,8 @@ Route::get('/banners', [BannerController::class, 'index']);
 // ─── ONDC (signed, disabled by default) ───
 Route::prefix('ondc')->middleware('throttle:api')->group(function () {
     Route::post('/search', [OndcController::class, 'search']);
+    Route::post('/select', [OndcController::class, 'select']);
+    Route::post('/init', [OndcController::class, 'init']);
     Route::post('/confirm', [OndcController::class, 'confirm']);
 });
 

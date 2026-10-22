@@ -1009,6 +1009,65 @@ $failingCallback = new \App\Services\Ondc\OndcCallbackClient(
 $failedCallbackResult = $failingCallback->send($onSearch, 'https://buyer.test/ondc/on_search');
 check('ondc callback: failure surfaced', $failedCallbackResult['ok'] === false && $failedCallbackResult['status'] === 500);
 
+echo "=== ONDC select/init + ClickHouse time-travel export ===\n";
+
+$ondcOrders = new \App\Services\Ondc\OndcOrderMapper();
+$selectPayload = $ondcOrders->onSelect(
+    [
+        'domain' => 'ONDC:RET10', 'action' => 'select', 'country' => 'IND', 'city' => 'std:081',
+        'bap_id' => 'buyer.test', 'bap_uri' => 'https://buyer.test', 'transaction_id' => 't-1',
+        'message_id' => 'm-1', 'timestamp' => '2026-10-22T10:00:00Z',
+    ],
+    ['id' => 'r-1'],
+    [['id' => 'item-1', 'descriptor' => ['name' => 'Biryani'], 'quantity' => ['count' => 2], 'price' => ['currency' => 'INR', 'value' => '199.00']]],
+    ['items' => 398.0, 'tax' => 19.9, 'delivery' => 27.0, 'total' => 444.9],
+    '2026-10-22T10:00:01Z',
+    ['bpp_id' => 'seller.test', 'bpp_uri' => 'https://seller.test'],
+);
+
+check('ondc select: action on_select', $selectPayload['context']['action'] === 'on_select');
+check('ondc select: quote total', $selectPayload['message']['order']['quote']['price']['value'] === '444.90');
+check('ondc select: breakup has delivery', collect($selectPayload['message']['order']['quote']['breakup'])
+    ->contains(fn ($b) => $b['title'] === 'Delivery' && $b['price']['value'] === '27.00'));
+check('ondc select: fulfillment delivery', $selectPayload['message']['order']['fulfillments'][0]['type'] === 'Delivery');
+
+$initPayload = $ondcOrders->onInit(
+    ['domain' => 'ONDC:RET10', 'action' => 'init', 'bap_uri' => 'https://buyer.test', 'transaction_id' => 't-1'],
+    ['provider' => ['id' => 'r-1'], 'items' => []],
+    '2026-10-22T10:00:02Z'
+);
+check('ondc init: action on_init', $initPayload['context']['action'] === 'on_init');
+check('ondc init: payment terms', $initPayload['message']['order']['payment']['type'] === 'ON-ORDER'
+    && $initPayload['message']['order']['payment']['status'] === 'NOT-PAID');
+
+$chSql = '';
+$chExporter = new \App\Services\Analytics\ClickHouseFeatureExporter(
+    function (string $sql) use (&$chSql): array {
+        $chSql = $sql;
+        return [
+            ['restaurant_id' => 'r-1', 'orders' => 12, 'delivered' => 9, 'cancelled' => 1, 'gmv' => 4500.5],
+            ['restaurant_id' => 'r-2', 'orders' => 3, 'delivered' => 2, 'cancelled' => 1, 'gmv' => 900],
+        ];
+    }
+);
+
+$features = $chExporter->asOf('2026-10-01T00:00:00Z', '11111111-1111-1111-1111-111111111111', 100);
+check('ch export: rows mapped', count($features) === 2 && $features[0]['gmv'] === 4500.5);
+check('ch export: sql has as-of bound', str_contains($chSql, '2026-10-01 00:00:00.000'));
+check('ch export: sql has city filter', str_contains($chSql, "city_id = '11111111-1111-1111-1111-111111111111'"));
+
+$csv = $chExporter->toCsv($features, '2026-10-01T00:00:00Z');
+check('ch export: csv header', str_contains($csv, 'restaurant_id,as_of,orders,delivered,cancelled,gmv'));
+check('ch export: csv row money', str_contains($csv, '4500.50'));
+
+$invalidCity = false;
+try {
+    $chExporter->asOf('2026-10-01T00:00:00Z', 'not-a-uuid');
+} catch (\InvalidArgumentException $e) {
+    $invalidCity = true;
+}
+check('ch export: invalid city rejected', $invalidCity);
+
 echo "=== SOS safety flow (incident + partner hook) ===\n";
 
 class FakeSosNotifier implements \App\Services\Sos\SosPartnerNotifier
